@@ -1,1349 +1,1691 @@
 /*
 ========================================================================
 Speciedex.org
-Terminal cmatrix Visualization Adapter
+Terminal CMatrix Visualization
 ========================================================================
 
-Renders the real upstream cmatrix program:
-    https://github.com/abishekvashok/cmatrix
-
-The executable runs inside a server-side PTY. Its ANSI stream is forwarded over
-WebSocket and rendered here. Static hosts replay an upstream recording through
-the same ANSI renderer. No synthetic Matrix implementation is included.
-
-Requires:
-    /static/js/terminal/cmatrix.js
+CMatrix uses the proven native ZMatrix canvas renderer with the printable
+character repertoire captured from native CMatrix. It is browser-native and
+requires no PTY, WebSocket, ANSI replay server, or external executable.
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
 ========================================================================
 */
+
 (function (window, document) {
     "use strict";
 
     const MODULE_NAME = "cmatrix";
-    const VERSION = "3.2.0";
-    const SYMBOL = Symbol.for("speciedex.terminal.cmatrix.visualization");
-    const CONTROLLER_SYMBOL = Symbol.for("speciedex.terminal.cmatrix.controller");
     const DEFAULT_FOREGROUND = "#c0d674";
+    const DEFAULT_HIGHLIGHT = "#eef7c8";
     const DEFAULT_BACKGROUND = "#020a05";
-    const DEFAULT_FONT_SIZE = 14;
-    const DEFAULT_COLUMNS = 120;
-    const DEFAULT_ROWS = 40;
+    const DEFAULT_FONT_FAMILY =
+        '"Noto Sans Mono", "Noto Sans CJK JP", "Noto Sans Devanagari", ' +
+        '"Noto Sans Tibetan", "IBM Plex Mono", "Segoe UI Symbol", monospace';
+    const DEFAULT_FONT_SIZE = 16;
+    const DEFAULT_DENSITY = 0.86;
+    const DEFAULT_SPEED = 1;
+    const DEFAULT_TRAIL = 0.12;
+    const DEFAULT_OPACITY = 0.72;
+    const DEFAULT_MAX_RECORDS = 128;
+    const DEFAULT_MAX_PULSES = 48;
+    const DEFAULT_FPS = 60;
+    const MIN_FONT_SIZE = 8;
+    const MAX_FONT_SIZE = 48;
 
-    const ANSI16 = [
-        "#000000", "#aa0000", "#00aa00", "#aa5500",
-        "#0000aa", "#aa00aa", "#00aaaa", "#aaaaaa",
-        "#555555", "#ff5555", "#55ff55", "#ffff55",
-        "#5555ff", "#ff55ff", "#55ffff", "#ffffff"
-    ];
+    /*
+    ========================================================================
+    CMatrix glyph repertoire
+    ========================================================================
 
-    function now() { return Date.now(); }
-    function iso(value = now()) { return new Date(value).toISOString(); }
-    function number(value, fallback, min, max) {
-        const parsed = Number(value);
-        return Number.isFinite(parsed)
-            ? Math.min(max, Math.max(min, parsed))
-            : fallback;
+    This is the printable character repertoire observed in the bundled native
+    CMatrix capture after ANSI/VT control sequences are removed.  The browser
+    CMatrix deliberately uses the same renderer as ZMatrix; only the glyph
+    bank differs.  That keeps animation, resize, pause/resume, injection,
+    adaptive FPS, and lifecycle behavior identical on static hosting.
+    ========================================================================
+    */
+
+    const CMATRIX_CHARACTERS =
+        "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz";
+
+    const GLYPH_BANKS = Object.freeze({
+        cmatrix:
+            CMATRIX_CHARACTERS
+    });
+
+    const DEFAULT_BANK_WEIGHTS = Object.freeze({
+        cmatrix: 1
+    });
+
+    const PRESETS = Object.freeze({
+        cmatrix: {
+            banks: ["cmatrix"],
+            foreground: DEFAULT_FOREGROUND,
+            highlight: DEFAULT_HIGHLIGHT,
+            background: DEFAULT_BACKGROUND,
+            density: DEFAULT_DENSITY,
+            speed: DEFAULT_SPEED,
+            trail: DEFAULT_TRAIL,
+            glow: 7
+        },
+
+        speciedex: {
+            banks: ["cmatrix"],
+            foreground: DEFAULT_FOREGROUND,
+            highlight: DEFAULT_HIGHLIGHT,
+            background: DEFAULT_BACKGROUND,
+            density: DEFAULT_DENSITY,
+            speed: DEFAULT_SPEED,
+            trail: DEFAULT_TRAIL,
+            glow: 7
+        }
+    });
+
+    function now() {
+        return performance.now();
     }
-    function object(value) {
+
+    function iso() {
+        return new Date().toISOString();
+    }
+
+    function isObject(value) {
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
-    function dispatch(target, type, detail = {}) {
+
+    function clone(value) {
+        if (typeof structuredClone === "function") {
+            try {
+                return structuredClone(value);
+            } catch (error) {
+                /* Fall through. */
+            }
+        }
+
+        if (value === undefined || value === null || typeof value !== "object") {
+            return value;
+        }
+
         try {
-            target.dispatchEvent(new CustomEvent(type, {
-                detail: { type, timestamp: iso(), ...detail }
-            }));
-        } catch (_error) {
-            /* Observer failures are isolated. */
+            return JSON.parse(JSON.stringify(value));
+        } catch (error) {
+            return value;
+        }
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (value === undefined || value === null || value === "") {
+            return fallback;
+        }
+
+        return ["1", "true", "yes", "on", "enabled"].includes(
+            String(value).trim().toLowerCase()
+        );
+    }
+
+    function parseNumber(value, fallback, minimum = -Infinity, maximum = Infinity) {
+        const number = Number(value);
+
+        if (!Number.isFinite(number)) {
+            return fallback;
+        }
+
+        return Math.min(maximum, Math.max(minimum, number));
+    }
+
+    function safeDispatch(target, name, detail) {
+        try {
+            target.dispatchEvent(new CustomEvent(name, { detail }));
+        } catch (error) {
+            /* Visualization events must never interrupt animation. */
         }
     }
 
     function resolveCanvas(target) {
-        let canvas;
+        if (target instanceof HTMLCanvasElement) {
+            return target;
+        }
 
-        if (typeof HTMLCanvasElement !== "undefined" && target instanceof HTMLCanvasElement) {
-            canvas = target;
-        } else if (typeof Element !== "undefined" && target instanceof Element) {
-            canvas = target.querySelector("canvas");
-            if (!canvas) {
-                canvas = document.createElement("canvas");
+        if (target instanceof Element) {
+            const canvas =
+                target.querySelector("canvas") ||
+                document.createElement("canvas");
+
+            if (!canvas.isConnected) {
                 target.appendChild(canvas);
             }
-        } else {
-            throw new TypeError("cmatrix requires a canvas or container element.");
+
+            return canvas;
         }
 
-        canvas.classList.add("terminal-cmatrix-canvas");
-        if (!canvas.style.width) canvas.style.width = "100%";
-        if (!canvas.style.height) canvas.style.height = "100%";
-        canvas.style.display = "block";
-        return canvas;
+        throw new TypeError(
+            "CMatrix requires a canvas or container element."
+        );
     }
 
-    function observeResize(canvas, callback) {
-        const observed =
-            canvas.parentElement &&
-            canvas.parentElement !== document.body
-                ? canvas.parentElement
-                : canvas;
-
-        let frame = 0;
-        let lastWidth = -1;
-        let lastHeight = -1;
-
-        const schedule = () => {
-            if (frame) return;
-            frame = window.requestAnimationFrame(() => {
-                frame = 0;
-                const rect = observed.getBoundingClientRect();
-                const width = Math.round(rect.width * 100) / 100;
-                const height = Math.round(rect.height * 100) / 100;
-
-                if (width === lastWidth && height === lastHeight) return;
-                lastWidth = width;
-                lastHeight = height;
-                callback();
-            });
-        };
-
+    function createResizeObserver(element, callback) {
         if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(schedule);
-            observer.observe(observed);
-            return () => {
-                observer.disconnect();
-                if (frame) {
-                    window.cancelAnimationFrame(frame);
-                    frame = 0;
-                }
-            };
+            const observer = new ResizeObserver(callback);
+            observer.observe(element);
+            return () => observer.disconnect();
         }
 
-        window.addEventListener("resize", schedule);
-        return () => {
-            window.removeEventListener("resize", schedule);
-            if (frame) window.cancelAnimationFrame(frame);
+        window.addEventListener("resize", callback);
+        return () => window.removeEventListener("resize", callback);
+    }
+
+    function splitGraphemes(value) {
+        const text = String(value || "");
+
+        if (typeof Intl.Segmenter === "function") {
+            const segmenter = new Intl.Segmenter(undefined, {
+                granularity: "grapheme"
+            });
+
+            return Array.from(
+                segmenter.segment(text),
+                (entry) => entry.segment
+            ).filter((glyph) => glyph.trim() !== "");
+        }
+
+        return Array.from(text).filter((glyph) => glyph.trim() !== "");
+    }
+
+    function normalizeBanks(value) {
+        const names = Array.isArray(value)
+            ? value
+            : String(value || "")
+                .split(",")
+                .map((name) => name.trim())
+                .filter(Boolean);
+
+        const valid = names.filter((name) =>
+            Object.prototype.hasOwnProperty.call(GLYPH_BANKS, name)
+        );
+
+        return valid.length
+            ? Array.from(new Set(valid))
+            : [...PRESETS.cmatrix.banks];
+    }
+
+    function normalizeRecord(record) {
+        if (!isObject(record)) {
+            return null;
+        }
+
+        const first = (keys, fallback = "") => {
+            for (const key of keys) {
+                const value = record[key];
+
+                if (
+                    value !== undefined &&
+                    value !== null &&
+                    value !== ""
+                ) {
+                    return String(value).trim();
+                }
+            }
+
+            return fallback;
+        };
+
+        const scientificName = first([
+                "scientific_name",
+                "scientificName",
+                "canonical_name",
+                "canonicalName",
+                "accepted_name",
+                "acceptedName",
+                "taxon_name",
+                "taxonName"
+            ], record.rank || record.taxon_rank || record.taxonRank
+                ? String(record.name || "").trim() : "");
+
+        if (!scientificName || /^(media|publication|reference|geography)$/i.test(
+            first(["rank", "taxon_rank", "taxonRank"])
+        )) {
+            return null;
+        }
+
+        return {
+            scientificName,
+
+            commonName: first([
+                "common_name",
+                "commonName",
+                "vernacular_name",
+                "vernacularName",
+                "preferred_common_name",
+                "preferredCommonName"
+            ], "No common name"),
+
+            id: first([
+                "speciedex_id",
+                "speciedexId",
+                "canonical_id",
+                "canonicalId",
+                "taxon_id",
+                "taxonId",
+                "id",
+                "key"
+            ], "pending"),
+
+            rank: first([
+                "rank",
+                "taxon_rank",
+                "taxonRank"
+            ]),
+
+            provider: first([
+                "provider",
+                "source",
+                "provider_id",
+                "providerId"
+            ], String(record.initial_source?.provider || "")),
+
+            raw: clone(record),
+            injectedAt: iso()
         };
     }
 
-    function unicodeWidth(character) {
-        const cp = character.codePointAt(0);
-        if (cp === undefined) return 0;
-        if (
-            (cp >= 0x0300 && cp <= 0x036f) ||
-            (cp >= 0x1ab0 && cp <= 0x1aff) ||
-            (cp >= 0x1dc0 && cp <= 0x1dff) ||
-            (cp >= 0x20d0 && cp <= 0x20ff) ||
-            (cp >= 0xfe20 && cp <= 0xfe2f) ||
-            cp === 0x200d ||
-            (cp >= 0xfe00 && cp <= 0xfe0f)
-        ) return 0;
-
-        if (
-            cp >= 0x1100 &&
-            (
-                cp <= 0x115f ||
-                cp === 0x2329 ||
-                cp === 0x232a ||
-                (cp >= 0x2e80 && cp <= 0xa4cf && cp !== 0x303f) ||
-                (cp >= 0xac00 && cp <= 0xd7a3) ||
-                (cp >= 0xf900 && cp <= 0xfaff) ||
-                (cp >= 0xfe10 && cp <= 0xfe19) ||
-                (cp >= 0xfe30 && cp <= 0xfe6f) ||
-                (cp >= 0xff00 && cp <= 0xff60) ||
-                (cp >= 0xffe0 && cp <= 0xffe6) ||
-                (cp >= 0x1f300 && cp <= 0x1faff) ||
-                (cp >= 0x20000 && cp <= 0x3fffd)
-            )
-        ) return 2;
-
-        return 1;
-    }
-
-    function ansi256(index) {
-        index = number(index, 7, 0, 255);
-        if (index < 16) return ANSI16[index];
-        if (index >= 232) {
-            const level = 8 + (index - 232) * 10;
-            return `rgb(${level},${level},${level})`;
+    class WeightedGlyphPool {
+        constructor(banks, weights = {}) {
+            this.banks = [];
+            this.totalWeight = 0;
+            this.configure(banks, weights);
         }
-        const value = index - 16;
-        const scale = component => component === 0 ? 0 : 55 + component * 40;
-        return `rgb(${scale(Math.floor(value / 36))},${scale(Math.floor((value % 36) / 6))},${scale(value % 6)})`;
+
+        configure(banks, weights = {}) {
+            this.banks = [];
+            this.totalWeight = 0;
+
+            for (const name of normalizeBanks(banks)) {
+                const glyphs = splitGraphemes(GLYPH_BANKS[name]);
+
+                if (!glyphs.length) {
+                    continue;
+                }
+
+                const weight = parseNumber(
+                    weights[name],
+                    DEFAULT_BANK_WEIGHTS[name] || 1,
+                    0.001,
+                    1000
+                );
+
+                this.totalWeight += weight;
+                this.banks.push({
+                    name,
+                    glyphs,
+                    weight,
+                    cumulative: this.totalWeight
+                });
+            }
+
+            return this;
+        }
+
+        random(random = Math.random) {
+            if (!this.banks.length) {
+                return "0";
+            }
+
+            const point = random() * this.totalWeight;
+            const bank =
+                this.banks.find((entry) => point <= entry.cumulative) ||
+                this.banks[this.banks.length - 1];
+
+            return bank.glyphs[
+                Math.floor(random() * bank.glyphs.length)
+            ] || "0";
+        }
+
+        status() {
+            return this.banks.map((bank) => ({
+                name: bank.name,
+                glyphs: bank.glyphs.length,
+                weight: bank.weight
+            }));
+        }
     }
 
-    class AnsiCanvasTerminal {
-        constructor(canvas, options = {}) {
-            this.canvas = canvas;
-            this.context = canvas.getContext("2d", {
+    class CMatrixController extends EventTarget {
+        constructor(target, options = {}) {
+            super();
+
+            this.canvas = resolveCanvas(target);
+            this.context = this.canvas.getContext("2d", {
                 alpha: false,
                 desynchronized: true
             });
+
             if (!this.context) {
-                throw new Error("Unable to acquire cmatrix canvas context.");
+                throw new Error("Unable to acquire CMatrix 2D canvas context.");
             }
+
+            const presetName = PRESETS[options.preset]
+                ? options.preset
+                : "cmatrix";
+            const preset = PRESETS[presetName];
 
             this.options = {
-                columns: number(options.columns, DEFAULT_COLUMNS, 20, 1000),
-                rows: number(options.rows, DEFAULT_ROWS, 10, 500),
-                fontSize: number(options.fontSize, DEFAULT_FONT_SIZE, 8, 48),
-                lineHeight: number(options.lineHeight, 1.1, 1, 2),
-                fontFamily: options.fontFamily || '"IBM Plex Mono", "Cascadia Mono", Consolas, monospace',
-                foreground: options.foreground || DEFAULT_FOREGROUND,
-                background: options.background || DEFAULT_BACKGROUND,
-                cursorVisible: options.cursorVisible !== false,
-                minHeight: number(options.minHeight, 320, 1, 5000)
+                preset: presetName,
+                banks: normalizeBanks(options.banks || preset.banks),
+                weights: {
+                    ...DEFAULT_BANK_WEIGHTS,
+                    ...(options.weights || {})
+                },
+                fontFamily:
+                    options.fontFamily ||
+                    DEFAULT_FONT_FAMILY,
+                fontSize: parseNumber(
+                    options.fontSize,
+                    DEFAULT_FONT_SIZE,
+                    MIN_FONT_SIZE,
+                    MAX_FONT_SIZE
+                ),
+                speed: parseNumber(
+                    options.speed ?? options.baseSpeed,
+                    preset.speed ?? DEFAULT_SPEED,
+                    0.05,
+                    20
+                ),
+                density: parseNumber(
+                    options.density,
+                    preset.density ?? DEFAULT_DENSITY,
+                    0.01,
+                    1
+                ),
+                trail: parseNumber(
+                    options.trail,
+                    preset.trail ?? DEFAULT_TRAIL,
+                    0.005,
+                    1
+                ),
+                opacity: parseNumber(
+                    options.opacity,
+                    DEFAULT_OPACITY,
+                    0.01,
+                    1
+                ),
+                foreground:
+                    options.foreground ||
+                    preset.foreground ||
+                    DEFAULT_FOREGROUND,
+                highlight:
+                    options.highlight ||
+                    preset.highlight ||
+                    DEFAULT_HIGHLIGHT,
+                background:
+                    options.background ||
+                    preset.background ||
+                    DEFAULT_BACKGROUND,
+                glow: parseNumber(
+                    options.glow,
+                    preset.glow ?? 7,
+                    0,
+                    40
+                ),
+                minLength: parseNumber(
+                    options.minLength,
+                    6,
+                    2,
+                    100
+                ),
+                maxLength: parseNumber(
+                    options.maxLength,
+                    28,
+                    2,
+                    200
+                ),
+                layers: parseNumber(
+                    options.layers,
+                    3,
+                    1,
+                    8
+                ),
+                maxInjectedRecords: parseNumber(
+                    options.maxInjectedRecords,
+                    DEFAULT_MAX_RECORDS,
+                    1,
+                    10000
+                ),
+                maxPulses: parseNumber(
+                    options.maxPulses,
+                    DEFAULT_MAX_PULSES,
+                    1,
+                    1000
+                ),
+                pulseSpeed: parseNumber(
+                    options.pulseSpeed,
+                    0.018,
+                    0.001,
+                    0.2
+                ),
+                tokenOpacity: parseNumber(
+                    options.tokenOpacity,
+                    0.78,
+                    0.01,
+                    1
+                ),
+                adaptive: options.adaptive !== false,
+                targetFPS: parseNumber(
+                    options.targetFPS,
+                    DEFAULT_FPS,
+                    15,
+                    144
+                ),
+                autoStart: options.autoStart !== false,
+                pauseWhenHidden: options.pauseWhenHidden !== false,
+                reducedMotion:
+                    options.reducedMotion === true ||
+                    Boolean(
+                        window.matchMedia?.(
+                            "(prefers-reduced-motion: reduce)"
+                        )?.matches
+                    )
             };
 
-            this.destroyed = false;
-            this.frame = 0;
-            this.parser = "";
-            this.mode = { origin: false, wrap: true, alternate: false };
-            this.scrollTop = 0;
-            this.scrollBottom = this.options.rows - 1;
-            this.cursor = { row: 0, column: 0, visible: true, pendingWrap: false };
-            this.savedCursor = { row: 0, column: 0 };
-            this.style = this._defaultStyle();
-            this.primary = this._createBuffer();
-            this.alternate = this._createBuffer();
-            this.cells = this.primary;
-            this.lastDimensions = null;
-
-            if (!this.canvas.style.minHeight) {
-                this.canvas.style.minHeight = `${this.options.minHeight}px`;
+            if (this.options.maxLength < this.options.minLength) {
+                this.options.maxLength = this.options.minLength;
             }
 
-            this.cleanupResize = observeResize(this.canvas, () => this.resize());
+            this.pool = new WeightedGlyphPool(
+                this.options.banks,
+                this.options.weights
+            );
+            this.columns = [];
+            this.records = [];
+            this.pulses = [];
+            this.running = false;
+            this.paused = false;
+            this.destroyed = false;
+            this.frame = 0;
+            this.animationFrame = 0;
+            this.lastFrameAt = 0;
+            this.lastDrawAt = 0;
+            this.elapsed = 0;
+            this.fpsSamples = [];
+            this.scale = 1;
+            this.lastError = null;
+            this.startedAt = null;
+            this.metrics = {
+                frames: 0,
+                glyphs: 0,
+                injected: 0,
+                pulses: 0,
+                droppedFrames: 0,
+                resizes: 0,
+                starts: 0,
+                stops: 0,
+                errors: 0
+            };
+
+            this._cleanupResize = createResizeObserver(
+                this.canvas,
+                () => this.resize()
+            );
+            this._visibilityHandler = () => {
+                if (!this.options.pauseWhenHidden) {
+                    return;
+                }
+
+                if (document.visibilityState === "hidden") {
+                    this.pause({
+                        automatic: true
+                    });
+                } else if (this.running) {
+                    this.resume({
+                        automatic: true
+                    });
+                }
+            };
+
+            document.addEventListener(
+                "visibilitychange",
+                this._visibilityHandler
+            );
+
             this.resize();
+            this.clear();
+
+            if (this.options.autoStart) {
+                this.start();
+            }
         }
 
-        _defaultStyle() {
-            return {
-                foreground: this.options.foreground,
-                background: this.options.background,
-                bold: false,
-                faint: false,
-                inverse: false
-            };
+        _emit(type, detail = {}) {
+            safeDispatch(this, type, {
+                type,
+                timestamp: iso(),
+                ...detail
+            });
         }
 
-        _blankCell() {
-            return {
-                character: " ",
-                width: 1,
-                continuation: false,
-                ...this._defaultStyle()
-            };
+        _recordError(error) {
+            this.lastError = error instanceof Error
+                ? error
+                : new Error(String(error));
+            this.metrics.errors += 1;
+
+            this._emit("error", {
+                error: {
+                    name: this.lastError.name,
+                    message: this.lastError.message,
+                    stack: this.lastError.stack || ""
+                }
+            });
         }
 
-        _blankRow() {
-            return Array.from(
-                { length: this.options.columns },
-                () => this._blankCell()
+        _createColumn(index, width, height) {
+            const fontSize = this.options.fontSize;
+            const length = Math.floor(
+                this.options.minLength +
+                Math.random() *
+                (this.options.maxLength - this.options.minLength + 1)
             );
-        }
-
-        _createBuffer() {
-            return Array.from(
-                { length: this.options.rows },
-                () => this._blankRow()
+            const layer = Math.floor(
+                Math.random() * this.options.layers
             );
-        }
-
-        _size() {
-            const rect = this.canvas.getBoundingClientRect();
-            const parent = this.canvas.parentElement;
-            const parentRect = parent?.getBoundingClientRect?.();
+            const depth =
+                this.options.layers === 1
+                    ? 1
+                    : 0.45 +
+                      (layer / (this.options.layers - 1)) * 0.55;
 
             return {
-                width: Math.max(
-                    0,
-                    rect.width ||
-                    this.canvas.clientWidth ||
-                    parentRect?.width ||
-                    parent?.clientWidth ||
-                    0
+                index,
+                x: index * fontSize,
+                y: -Math.random() * height,
+                length,
+                speed:
+                    (0.25 + Math.random() * 1.45) *
+                    this.options.speed *
+                    depth,
+                phase: Math.random() * Math.PI * 2,
+                layer,
+                depth,
+                active: Math.random() <= this.options.density,
+                glyphs: Array.from(
+                    { length },
+                    () => this.pool.random()
                 ),
-                height: Math.max(
-                    0,
-                    rect.height ||
-                    this.canvas.clientHeight ||
-                    parentRect?.height ||
-                    parent?.clientHeight ||
-                    this.options.minHeight
-                )
+                mutations: Array.from(
+                    { length },
+                    () => Math.random()
+                ),
+                nextMutation: now() + 80 + Math.random() * 900
             };
         }
 
-        reset(render = true) {
-            this.primary = this._createBuffer();
-            this.alternate = this._createBuffer();
-            this.cells = this.primary;
-            this.mode = { origin: false, wrap: true, alternate: false };
-            this.scrollTop = 0;
-            this.scrollBottom = this.options.rows - 1;
-            this.cursor = { row: 0, column: 0, visible: true, pendingWrap: false };
-            this.savedCursor = { row: 0, column: 0 };
-            this.style = this._defaultStyle();
-            if (render) this.scheduleRender();
+        _resetColumn(column, height) {
+            column.y =
+                -this.options.fontSize *
+                (2 + Math.random() * column.length);
+            column.speed =
+                (0.25 + Math.random() * 1.45) *
+                this.options.speed *
+                column.depth;
+            column.length = Math.floor(
+                this.options.minLength +
+                Math.random() *
+                (this.options.maxLength - this.options.minLength + 1)
+            );
+            column.active =
+                Math.random() <= this.options.density;
+            column.glyphs = Array.from(
+                { length: column.length },
+                () => this.pool.random()
+            );
+            column.mutations = Array.from(
+                { length: column.length },
+                () => Math.random()
+            );
+            column.nextMutation = now() + 100 + Math.random() * 1200;
         }
 
         resize() {
-            if (this.destroyed) return null;
-            const size = this._size();
-            if (!size.width || !size.height) return null;
+            if (this.destroyed) {
+                return;
+            }
 
-            const ratio = Math.min(window.devicePixelRatio || 1, 2);
-            const pixelWidth = Math.max(1, Math.floor(size.width * ratio));
-            const pixelHeight = Math.max(1, Math.floor(size.height * ratio));
+            const rect = this.canvas.getBoundingClientRect();
+            const ratio = Math.min(
+                window.devicePixelRatio || 1,
+                2
+            );
+            const width = Math.max(
+                1,
+                Math.floor(rect.width * ratio)
+            );
+            const height = Math.max(
+                1,
+                Math.floor(rect.height * ratio)
+            );
 
             if (
-                this.canvas.width !== pixelWidth ||
-                this.canvas.height !== pixelHeight
+                this.canvas.width !== width ||
+                this.canvas.height !== height
             ) {
-                this.canvas.width = pixelWidth;
-                this.canvas.height = pixelHeight;
+                this.canvas.width = width;
+                this.canvas.height = height;
             }
 
-            this.context.setTransform(ratio, 0, 0, ratio, 0, 0);
-
-            const columns = Math.max(
-                20,
-                Math.floor(size.width / (this.options.fontSize * 0.62))
+            this.context.setTransform(
+                ratio,
+                0,
+                0,
+                ratio,
+                0,
+                0
             );
-            const rows = Math.max(
-                10,
-                Math.floor(
-                    size.height /
-                    (this.options.fontSize * this.options.lineHeight)
+
+            const logicalWidth = Math.max(1, rect.width);
+            const logicalHeight = Math.max(1, rect.height);
+            const count = Math.max(
+                1,
+                Math.ceil(
+                    logicalWidth /
+                    (this.options.fontSize * this.scale)
                 )
             );
+            const previous = this.columns;
+            this.columns = Array.from(
+                { length: count },
+                (_, index) => {
+                    const existing = previous[index];
 
-            const changed =
-                !this.lastDimensions ||
-                this.lastDimensions.columns !== columns ||
-                this.lastDimensions.rows !== rows;
-
-            if (changed) {
-                this.setDimensions(columns, rows, false);
-                this.lastDimensions = { columns, rows };
-                dispatch(this.canvas, "cmatrix:dimensions", this.lastDimensions);
-            }
-
-            this.scheduleRender();
-            return {
-                columns: this.options.columns,
-                rows: this.options.rows
-            };
-        }
-
-        setDimensions(columns, rows, render = true) {
-            columns = Math.floor(number(columns, this.options.columns, 20, 1000));
-            rows = Math.floor(number(rows, this.options.rows, 10, 500));
-
-            const resizeBuffer = buffer => {
-                const next = Array.from(
-                    { length: rows },
-                    () => Array.from(
-                        { length: columns },
-                        () => this._blankCell()
-                    )
-                );
-
-                for (let row = 0; row < Math.min(rows, buffer.length); row += 1) {
-                    for (
-                        let column = 0;
-                        column < Math.min(columns, buffer[row]?.length || 0);
-                        column += 1
-                    ) {
-                        next[row][column] = buffer[row][column];
+                    if (existing) {
+                        existing.index = index;
+                        existing.x =
+                            index *
+                            this.options.fontSize *
+                            this.scale;
+                        return existing;
                     }
+
+                    return this._createColumn(
+                        index,
+                        logicalWidth,
+                        logicalHeight
+                    );
                 }
-
-                return next;
-            };
-
-            this.primary = resizeBuffer(this.primary || []);
-            this.alternate = resizeBuffer(this.alternate || []);
-            this.options.columns = columns;
-            this.options.rows = rows;
-            this.cells = this.mode.alternate ? this.alternate : this.primary;
-            this.scrollTop = Math.min(this.scrollTop, rows - 1);
-            this.scrollBottom = Math.max(
-                this.scrollTop,
-                Math.min(this.scrollBottom, rows - 1)
             );
-            this.cursor.row = Math.min(this.cursor.row, rows - 1);
-            this.cursor.column = Math.min(this.cursor.column, columns - 1);
-            if (render) this.scheduleRender();
+
+            this.metrics.resizes += 1;
+            this._emit("resize", {
+                width: logicalWidth,
+                height: logicalHeight,
+                columns: count,
+                scale: this.scale
+            });
         }
 
-        _regionScrollUp(count = 1) {
-            count = Math.max(1, count);
-            while (count-- > 0) {
-                this.cells.splice(this.scrollTop, 1);
-                this.cells.splice(this.scrollBottom, 0, this._blankRow());
+        _mutateColumn(column, timestamp) {
+            if (timestamp < column.nextMutation) {
+                return;
             }
-        }
 
-        _regionScrollDown(count = 1) {
-            count = Math.max(1, count);
-            while (count-- > 0) {
-                this.cells.splice(this.scrollBottom, 1);
-                this.cells.splice(this.scrollTop, 0, this._blankRow());
-            }
-        }
+            const mutations = Math.max(
+                1,
+                Math.floor(column.length * 0.12)
+            );
 
-        _lineFeed() {
-            this.cursor.pendingWrap = false;
-            if (this.cursor.row === this.scrollBottom) {
-                this._regionScrollUp(1);
-            } else {
-                this.cursor.row = Math.min(
-                    this.options.rows - 1,
-                    this.cursor.row + 1
+            for (let index = 0; index < mutations; index += 1) {
+                const position = Math.floor(
+                    Math.random() * column.length
                 );
+                column.glyphs[position] = this.pool.random();
+                column.mutations[position] = Math.random();
             }
+
+            column.nextMutation =
+                timestamp +
+                50 +
+                Math.random() * 650;
         }
 
-        _reverseIndex() {
-            if (this.cursor.row === this.scrollTop) {
-                this._regionScrollDown(1);
-            } else {
-                this.cursor.row = Math.max(0, this.cursor.row - 1);
-            }
-        }
-
-        _put(character) {
-            if (character === "\n") {
-                this._lineFeed();
-                return;
-            }
-            if (character === "\r") {
-                this.cursor.column = 0;
-                this.cursor.pendingWrap = false;
-                return;
-            }
-            if (character === "\b") {
-                this.cursor.column = Math.max(0, this.cursor.column - 1);
-                this.cursor.pendingWrap = false;
-                return;
-            }
-            if (character === "\t") {
-                this.cursor.column = Math.min(
-                    this.options.columns - 1,
-                    (Math.floor(this.cursor.column / 8) + 1) * 8
-                );
-                return;
-            }
-            if (character.codePointAt(0) < 0x20 || character === "\u007f") return;
-
-            const width = unicodeWidth(character);
-            if (width === 0) {
-                const column = Math.max(0, this.cursor.column - 1);
-                const cell = this.cells[this.cursor.row][column];
-                if (cell && !cell.continuation) cell.character += character;
-                return;
-            }
-
-            if (this.cursor.pendingWrap) {
-                if (this.mode.wrap) {
-                    this.cursor.column = 0;
-                    this._lineFeed();
-                } else {
-                    this.cursor.pendingWrap = false;
-                }
-            }
-
-            if (width === 2 && this.cursor.column === this.options.columns - 1) {
-                if (this.mode.wrap) {
-                    this.cursor.column = 0;
-                    this._lineFeed();
+        _drawColumn(column, delta, width, height, timestamp) {
+            if (!column.active) {
+                if (Math.random() < 0.0015) {
+                    column.active = true;
                 } else {
                     return;
                 }
             }
 
-            let foreground = this.style.foreground;
-            let background = this.style.background;
-            if (this.style.inverse) {
-                [foreground, background] = [background, foreground];
-            }
+            this._mutateColumn(column, timestamp);
 
-            this.cells[this.cursor.row][this.cursor.column] = {
-                character,
-                width,
-                continuation: false,
-                foreground,
-                background,
-                bold: this.style.bold,
-                faint: this.style.faint,
-                inverse: this.style.inverse
-            };
+            const fontSize =
+                this.options.fontSize *
+                this.scale *
+                column.depth;
+            const lineHeight = fontSize * 1.08;
+            const x =
+                column.index *
+                this.options.fontSize *
+                this.scale;
 
-            if (
-                width === 2 &&
-                this.cursor.column + 1 < this.options.columns
-            ) {
-                this.cells[this.cursor.row][this.cursor.column + 1] = {
-                    ...this._blankCell(),
-                    width: 0,
-                    continuation: true
-                };
-            }
+            column.y +=
+                column.speed *
+                delta *
+                0.075 *
+                this.scale;
 
-            const next = this.cursor.column + width;
-            if (next >= this.options.columns) {
-                this.cursor.column = this.options.columns - 1;
-                this.cursor.pendingWrap = true;
-            } else {
-                this.cursor.column = next;
-            }
-        }
-
-        _eraseDisplay(mode) {
-            if (mode === 2 || mode === 3) {
-                for (let row = 0; row < this.options.rows; row += 1) {
-                    this.cells[row] = this._blankRow();
-                }
-                return;
-            }
-
-            if (mode === 1) {
-                for (let row = 0; row < this.cursor.row; row += 1) {
-                    this.cells[row] = this._blankRow();
-                }
-                for (let column = 0; column <= this.cursor.column; column += 1) {
-                    this.cells[this.cursor.row][column] = this._blankCell();
-                }
-                return;
-            }
+            this.context.font =
+                `${Math.max(8, fontSize)}px ${this.options.fontFamily}`;
+            this.context.textBaseline = "top";
+            this.context.textAlign = "left";
 
             for (
-                let column = this.cursor.column;
-                column < this.options.columns;
-                column += 1
+                let position = 0;
+                position < column.length;
+                position += 1
             ) {
-                this.cells[this.cursor.row][column] = this._blankCell();
-            }
+                const y =
+                    column.y -
+                    position * lineHeight;
+                const progress =
+                    1 - position / column.length;
 
-            for (
-                let row = this.cursor.row + 1;
-                row < this.options.rows;
-                row += 1
-            ) {
-                this.cells[row] = this._blankRow();
-            }
-        }
-
-        _eraseLine(mode) {
-            if (mode === 2) {
-                this.cells[this.cursor.row] = this._blankRow();
-                return;
-            }
-
-            const start = mode === 1 ? 0 : this.cursor.column;
-            const end = mode === 1
-                ? this.cursor.column
-                : this.options.columns - 1;
-
-            for (let column = start; column <= end; column += 1) {
-                this.cells[this.cursor.row][column] = this._blankCell();
-            }
-        }
-
-        _sgr(values) {
-            if (!values.length) values = [0];
-
-            for (let index = 0; index < values.length; index += 1) {
-                const value = Number.isFinite(values[index]) ? values[index] : 0;
-
-                if (value === 0) this.style = this._defaultStyle();
-                else if (value === 1) this.style.bold = true;
-                else if (value === 2) this.style.faint = true;
-                else if (value === 7) this.style.inverse = true;
-                else if (value === 22) {
-                    this.style.bold = false;
-                    this.style.faint = false;
-                } else if (value === 27) this.style.inverse = false;
-                else if (value === 39) this.style.foreground = this.options.foreground;
-                else if (value === 49) this.style.background = this.options.background;
-                else if (value >= 30 && value <= 37) this.style.foreground = ANSI16[value - 30];
-                else if (value >= 90 && value <= 97) this.style.foreground = ANSI16[value - 90 + 8];
-                else if (value >= 40 && value <= 47) this.style.background = ANSI16[value - 40];
-                else if (value >= 100 && value <= 107) this.style.background = ANSI16[value - 100 + 8];
-                else if ((value === 38 || value === 48) && values[index + 1] === 5) {
-                    const color = ansi256(values[index + 2]);
-                    if (value === 38) this.style.foreground = color;
-                    else this.style.background = color;
-                    index += 2;
-                } else if ((value === 38 || value === 48) && values[index + 1] === 2) {
-                    const color = `rgb(${number(values[index + 2], 0, 0, 255)},${number(values[index + 3], 0, 0, 255)},${number(values[index + 4], 0, 0, 255)})`;
-                    if (value === 38) this.style.foreground = color;
-                    else this.style.background = color;
-                    index += 4;
-                }
-            }
-        }
-
-        _setPrivateMode(parameters, enabled) {
-            for (
-                const code of parameters
-                    .replace(/^\?/, "")
-                    .split(";")
-                    .map(Number)
-            ) {
-                if (code === 6) this.mode.origin = enabled;
-                else if (code === 7) this.mode.wrap = enabled;
-                else if (code === 25) this.cursor.visible = enabled;
-                else if ([47, 1047, 1049].includes(code)) {
-                    if (enabled && !this.mode.alternate) {
-                        this.savedCursor = {
-                            row: this.cursor.row,
-                            column: this.cursor.column
-                        };
-                        this.mode.alternate = true;
-                        this.alternate = this._createBuffer();
-                        this.cells = this.alternate;
-                        this.cursor.row = 0;
-                        this.cursor.column = 0;
-                    } else if (!enabled && this.mode.alternate) {
-                        this.mode.alternate = false;
-                        this.cells = this.primary;
-                        this.cursor = {
-                            ...this.cursor,
-                            ...this.savedCursor,
-                            pendingWrap: false
-                        };
-                    }
-                }
-            }
-        }
-
-        _csi(parameters, command) {
-            const privateMode = parameters.startsWith("?");
-            const clean = privateMode ? parameters.slice(1) : parameters;
-            const values = clean === ""
-                ? [0]
-                : clean.split(";").map(value => value === "" ? 0 : Number(value));
-            const first = values[0] || 0;
-            const top = this.mode.origin ? this.scrollTop : 0;
-            const bottom = this.mode.origin
-                ? this.scrollBottom
-                : this.options.rows - 1;
-
-            switch (command) {
-                case "A":
-                    this.cursor.row = Math.max(top, this.cursor.row - (first || 1));
-                    break;
-                case "B":
-                    this.cursor.row = Math.min(bottom, this.cursor.row + (first || 1));
-                    break;
-                case "C":
-                    this.cursor.column = Math.min(
-                        this.options.columns - 1,
-                        this.cursor.column + (first || 1)
-                    );
-                    break;
-                case "D":
-                    this.cursor.column = Math.max(0, this.cursor.column - (first || 1));
-                    break;
-                case "E":
-                    this.cursor.row = Math.min(bottom, this.cursor.row + (first || 1));
-                    this.cursor.column = 0;
-                    break;
-                case "F":
-                    this.cursor.row = Math.max(top, this.cursor.row - (first || 1));
-                    this.cursor.column = 0;
-                    break;
-                case "G":
-                    this.cursor.column = Math.min(
-                        this.options.columns - 1,
-                        Math.max(0, (first || 1) - 1)
-                    );
-                    break;
-                case "H":
-                case "f":
-                    this.cursor.row = Math.min(
-                        bottom,
-                        Math.max(top, top + (values[0] || 1) - 1)
-                    );
-                    this.cursor.column = Math.min(
-                        this.options.columns - 1,
-                        Math.max(0, (values[1] || 1) - 1)
-                    );
-                    break;
-                case "J":
-                    this._eraseDisplay(first);
-                    break;
-                case "K":
-                    this._eraseLine(first);
-                    break;
-                case "m":
-                    this._sgr(values);
-                    break;
-                case "s":
-                    this.savedCursor = {
-                        row: this.cursor.row,
-                        column: this.cursor.column
-                    };
-                    break;
-                case "u":
-                    this.cursor.row = this.savedCursor.row;
-                    this.cursor.column = this.savedCursor.column;
-                    break;
-                case "r": {
-                    const start = Math.max(0, (values[0] || 1) - 1);
-                    const end = Math.min(
-                        this.options.rows - 1,
-                        (values[1] || this.options.rows) - 1
-                    );
-                    if (start < end) {
-                        this.scrollTop = start;
-                        this.scrollBottom = end;
-                        this.cursor.row = this.mode.origin ? start : 0;
-                        this.cursor.column = 0;
-                    }
-                    break;
-                }
-                case "S":
-                    this._regionScrollUp(first || 1);
-                    break;
-                case "T":
-                    this._regionScrollDown(first || 1);
-                    break;
-                case "L": {
-                    const count = Math.min(
-                        first || 1,
-                        this.scrollBottom - this.cursor.row + 1
-                    );
-                    for (let index = 0; index < count; index += 1) {
-                        this.cells.splice(this.cursor.row, 0, this._blankRow());
-                        this.cells.splice(this.scrollBottom + 1, 1);
-                    }
-                    break;
-                }
-                case "M": {
-                    const count = Math.min(
-                        first || 1,
-                        this.scrollBottom - this.cursor.row + 1
-                    );
-                    for (let index = 0; index < count; index += 1) {
-                        this.cells.splice(this.cursor.row, 1);
-                        this.cells.splice(this.scrollBottom, 0, this._blankRow());
-                    }
-                    break;
-                }
-                case "P": {
-                    const count = Math.min(
-                        first || 1,
-                        this.options.columns - this.cursor.column
-                    );
-                    const row = this.cells[this.cursor.row];
-                    row.splice(this.cursor.column, count);
-                    row.push(...Array.from(
-                        { length: count },
-                        () => this._blankCell()
-                    ));
-                    break;
-                }
-                case "@": {
-                    const count = Math.min(
-                        first || 1,
-                        this.options.columns - this.cursor.column
-                    );
-                    const row = this.cells[this.cursor.row];
-                    row.splice(
-                        this.cursor.column,
-                        0,
-                        ...Array.from(
-                            { length: count },
-                            () => this._blankCell()
-                        )
-                    );
-                    row.length = this.options.columns;
-                    break;
-                }
-                case "X": {
-                    const count = Math.min(
-                        first || 1,
-                        this.options.columns - this.cursor.column
-                    );
-                    for (
-                        let column = this.cursor.column;
-                        column < this.cursor.column + count;
-                        column += 1
-                    ) {
-                        this.cells[this.cursor.row][column] = this._blankCell();
-                    }
-                    break;
-                }
-                case "h":
-                    if (privateMode) this._setPrivateMode(parameters, true);
-                    break;
-                case "l":
-                    if (privateMode) this._setPrivateMode(parameters, false);
-                    break;
-                default:
-                    break;
-            }
-
-            this.cursor.pendingWrap = false;
-        }
-
-        write(data) {
-            if (this.destroyed || data === null || data === undefined) return;
-
-            const text = this.parser + String(data);
-            this.parser = "";
-
-            for (let index = 0; index < text.length;) {
-                const codePoint = text.codePointAt(index);
-                const character = String.fromCodePoint(codePoint);
-
-                if (character !== "\u001b") {
-                    this._put(character);
-                    index += character.length;
+                if (
+                    y < -lineHeight ||
+                    y > height + lineHeight
+                ) {
                     continue;
                 }
 
-                if (index + 1 >= text.length) {
-                    this.parser = text.slice(index);
-                    break;
-                }
+                let alpha =
+                    Math.pow(progress, 1.45) *
+                    this.options.opacity *
+                    column.depth;
 
-                const next = text[index + 1];
-
-                if (next === "[") {
-                    let end = index + 2;
-                    while (
-                        end < text.length &&
-                        !/[\x40-\x7e]/.test(text[end])
-                    ) {
-                        end += 1;
-                    }
-
-                    if (end >= text.length) {
-                        this.parser = text.slice(index);
-                        break;
-                    }
-
-                    this._csi(text.slice(index + 2, end), text[end]);
-                    index = end + 1;
-                } else if (next === "]") {
-                    let end = index + 2;
-                    let terminated = false;
-                    while (end < text.length) {
-                        if (text[end] === "\u0007") {
-                            end += 1;
-                            terminated = true;
-                            break;
-                        }
-                        if (
-                            text[end] === "\u001b" &&
-                            text[end + 1] === "\\"
-                        ) {
-                            end += 2;
-                            terminated = true;
-                            break;
-                        }
-                        end += 1;
-                    }
-                    if (!terminated) {
-                        this.parser = text.slice(index);
-                        break;
-                    }
-                    index = end;
-                } else if (next === "7") {
-                    this.savedCursor = {
-                        row: this.cursor.row,
-                        column: this.cursor.column
-                    };
-                    index += 2;
-                } else if (next === "8") {
-                    this.cursor.row = this.savedCursor.row;
-                    this.cursor.column = this.savedCursor.column;
-                    index += 2;
-                } else if (next === "D") {
-                    this._lineFeed();
-                    index += 2;
-                } else if (next === "M") {
-                    this._reverseIndex();
-                    index += 2;
-                } else if (next === "E") {
-                    this.cursor.column = 0;
-                    this._lineFeed();
-                    index += 2;
-                } else if (next === "c") {
-                    this.reset(false);
-                    index += 2;
+                if (position === 0) {
+                    alpha = Math.min(
+                        1,
+                        alpha * 1.75
+                    );
+                    this.context.fillStyle =
+                        this.options.highlight;
+                    this.context.shadowColor =
+                        this.options.highlight;
+                    this.context.shadowBlur =
+                        this.options.glow * column.depth;
                 } else {
-                    index += 2;
+                    this.context.fillStyle =
+                        this.options.foreground;
+                    this.context.shadowColor =
+                        this.options.foreground;
+                    this.context.shadowBlur =
+                        this.options.glow *
+                        0.35 *
+                        column.depth;
                 }
+
+                this.context.globalAlpha = alpha;
+                this.context.fillText(
+                    column.glyphs[position],
+                    x,
+                    y
+                );
+                this.metrics.glyphs += 1;
             }
 
-            this.scheduleRender();
+            this.context.globalAlpha = 1;
+            this.context.shadowBlur = 0;
+
+            if (
+                column.y -
+                column.length * lineHeight >
+                height + lineHeight ||
+                Math.random() > 0.9995
+            ) {
+                this._resetColumn(column, height);
+            }
         }
 
-        scheduleRender() {
-            if (this.destroyed || this.frame) return;
-            this.frame = window.requestAnimationFrame(() => {
-                this.frame = 0;
-                this.render();
-            });
-        }
+        _drawPulses(width, height, delta) {
+            if (!this.pulses.length) {
+                return;
+            }
 
-        render() {
-            if (this.destroyed) return;
-            const { width, height } = this._size();
-            if (!width || !height) return;
+            this.context.save();
+            this.context.textBaseline = "middle";
+            this.context.textAlign = "left";
 
-            const cellWidth = width / this.options.columns;
-            const cellHeight = height / this.options.rows;
-            const fontSize = Math.min(
-                this.options.fontSize,
-                cellHeight / this.options.lineHeight
+            for (const pulse of this.pulses) {
+                pulse.progress +=
+                    this.options.pulseSpeed *
+                    delta *
+                    0.06;
+
+                const normalized = Math.min(
+                    1,
+                    pulse.progress
+                );
+                const x =
+                    -pulse.width +
+                    (width + pulse.width) * normalized;
+                const laneHeight =
+                    height /
+                    Math.max(1, pulse.lanes);
+                const y =
+                    laneHeight * pulse.lane +
+                    laneHeight * 0.5;
+                const alpha =
+                    Math.sin(normalized * Math.PI) *
+                    this.options.tokenOpacity;
+
+                this.context.globalAlpha = alpha;
+                this.context.font =
+                    `600 ${pulse.fontSize}px ${this.options.fontFamily}`;
+                this.context.fillStyle =
+                    this.options.highlight;
+                this.context.shadowColor =
+                    this.options.foreground;
+                this.context.shadowBlur =
+                    this.options.glow;
+                this.context.fillText(
+                    pulse.text,
+                    x,
+                    y
+                );
+
+                this.context.strokeStyle =
+                    this.options.foreground;
+                this.context.globalAlpha =
+                    alpha * 0.35;
+                this.context.beginPath();
+                this.context.moveTo(
+                    Math.max(0, x - 120),
+                    y + pulse.fontSize * 0.75
+                );
+                this.context.lineTo(
+                    Math.min(width, x + pulse.width),
+                    y + pulse.fontSize * 0.75
+                );
+                this.context.stroke();
+            }
+
+            this.context.restore();
+
+            this.pulses = this.pulses.filter(
+                (pulse) => pulse.progress < 1.05
             );
-            const normalFont = `400 ${fontSize}px ${this.options.fontFamily}`;
-            const boldFont = `700 ${fontSize}px ${this.options.fontFamily}`;
-            const context = this.context;
-
-            context.globalAlpha = 1;
-            context.fillStyle = this.options.background;
-            context.fillRect(0, 0, width, height);
-            context.textBaseline = "top";
-
-            let currentFont = "";
-
-            for (let row = 0; row < this.options.rows; row += 1) {
-                for (let column = 0; column < this.options.columns; column += 1) {
-                    const cell = this.cells[row][column];
-                    if (!cell || cell.continuation) continue;
-
-                    if (cell.background !== this.options.background) {
-                        context.globalAlpha = 1;
-                        context.fillStyle = cell.background;
-                        context.fillRect(
-                            column * cellWidth,
-                            row * cellHeight,
-                            cellWidth * (cell.width || 1) + 1,
-                            cellHeight + 1
-                        );
-                    }
-
-                    if (cell.character !== " ") {
-                        const font = cell.bold ? boldFont : normalFont;
-                        if (font !== currentFont) {
-                            context.font = font;
-                            currentFont = font;
-                        }
-                        context.globalAlpha = cell.faint ? 0.5 : 1;
-                        context.fillStyle = cell.foreground;
-                        context.fillText(
-                            cell.character,
-                            column * cellWidth,
-                            row * cellHeight
-                        );
-                    }
-                }
-            }
-
-            context.globalAlpha = 1;
-            if (this.options.cursorVisible && this.cursor.visible) {
-                context.fillStyle = this.options.foreground;
-                context.globalAlpha = 0.35;
-                context.fillRect(
-                    this.cursor.column * cellWidth,
-                    this.cursor.row * cellHeight,
-                    cellWidth,
-                    cellHeight
-                );
-                context.globalAlpha = 1;
-            }
         }
 
-        configure(options = {}) {
-            if (options.fontSize !== undefined) {
-                this.options.fontSize = number(
-                    options.fontSize,
-                    this.options.fontSize,
-                    8,
-                    48
-                );
-            }
-            if (options.lineHeight !== undefined) {
-                this.options.lineHeight = number(
-                    options.lineHeight,
-                    this.options.lineHeight,
-                    1,
-                    2
-                );
-            }
-            if (options.fontFamily) this.options.fontFamily = options.fontFamily;
-            if (options.foreground) this.options.foreground = options.foreground;
-            if (options.background) this.options.background = options.background;
-            if (options.cursorVisible !== undefined) {
-                this.options.cursorVisible = Boolean(options.cursorVisible);
-            }
-            if (options.minHeight !== undefined) {
-                this.options.minHeight = number(
-                    options.minHeight,
-                    this.options.minHeight,
-                    1,
-                    5000
-                );
-                this.canvas.style.minHeight = `${this.options.minHeight}px`;
+        _drawRecordTokens(width, height) {
+            if (
+                !this.records.length ||
+                this.frame % 36 !== 0
+            ) {
+                return;
             }
 
-            if (options.columns !== undefined || options.rows !== undefined) {
-                this.setDimensions(
-                    options.columns || this.options.columns,
-                    options.rows || this.options.rows
+            const record =
+                this.records[
+                    Math.floor(
+                        Math.random() *
+                        this.records.length
+                    )
+                ];
+            const labels = [
+                "SPECIES",
+                "TAXON",
+                "GENUS",
+                "CLADE",
+                "INDEX",
+                "HASH",
+                "NODE",
+                "DNA"
+            ];
+            const label =
+                labels[
+                    Math.floor(
+                        Math.random() *
+                        labels.length
+                    )
+                ];
+            const text =
+                `${label}:${record.id}`;
+
+            this.context.save();
+            this.context.font =
+                `10px ${this.options.fontFamily}`;
+            this.context.fillStyle =
+                this.options.foreground;
+            this.context.globalAlpha = 0.22;
+            this.context.shadowColor =
+                this.options.foreground;
+            this.context.shadowBlur =
+                this.options.glow * 0.25;
+            this.context.fillText(
+                text,
+                Math.random() *
+                    Math.max(
+                        1,
+                        width -
+                        this.context.measureText(text).width
+                    ),
+                Math.random() *
+                    Math.max(1, height - 12)
+            );
+            this.context.restore();
+        }
+
+        _updatePerformance(delta) {
+            if (!this.options.adaptive) {
+                return;
+            }
+
+            const fps =
+                delta > 0
+                    ? 1000 / delta
+                    : this.options.targetFPS;
+
+            this.fpsSamples.push(fps);
+
+            if (this.fpsSamples.length > 90) {
+                this.fpsSamples.shift();
+            }
+
+            if (
+                this.metrics.frames % 45 !== 0 ||
+                this.fpsSamples.length < 30
+            ) {
+                return;
+            }
+
+            const average =
+                this.fpsSamples.reduce(
+                    (total, value) => total + value,
+                    0
+                ) /
+                this.fpsSamples.length;
+            const target = this.options.targetFPS;
+
+            if (
+                average < target * 0.72 &&
+                this.scale < 1.8
+            ) {
+                this.scale = Math.min(
+                    1.8,
+                    this.scale + 0.1
                 );
-            } else {
+                this.resize();
+            } else if (
+                average > target * 0.94 &&
+                this.scale > 1
+            ) {
+                this.scale = Math.max(
+                    1,
+                    this.scale - 0.05
+                );
                 this.resize();
             }
         }
 
-        destroy() {
-            if (this.destroyed) return false;
-            this.destroyed = true;
-            this.cleanupResize?.();
-            if (this.frame) window.cancelAnimationFrame(this.frame);
-            this.cells = [];
-            return true;
-        }
-    }
-
-    class CmatrixController extends EventTarget {
-        constructor(target, options = {}) {
-            super();
-
-            const Client = window.SpeciedexTerminalCmatrixClient?.CmatrixClient;
-            if (!Client) {
-                throw new Error("cmatrix.js must load before terminal-cmatrix.js.");
+        draw(timestamp = now()) {
+            if (
+                !this.running ||
+                this.paused ||
+                this.destroyed
+            ) {
+                return;
             }
 
-            this.canvas = resolveCanvas(target);
-            this.context = options.context || null;
-            this.options = {
-                endpoint: options.endpoint || options.socketURL || "/api/terminal/cmatrix",
-                recordingURL: options.recordingURL || "/static/data/cmatrix/cmatrix-recording.json",
-                args: Array.isArray(options.args) ? [...options.args] : [],
-                autoStart: options.autoStart !== false,
-                autoReconnect: options.autoReconnect !== false,
-                keyboard: options.keyboard !== false,
-                columns: number(options.columns, DEFAULT_COLUMNS, 20, 1000),
-                rows: number(options.rows, DEFAULT_ROWS, 10, 500),
-                fontSize: number(options.fontSize, DEFAULT_FONT_SIZE, 8, 48),
-                fontFamily: options.fontFamily,
-                lineHeight: number(options.lineHeight, 1.1, 1, 2),
-                foreground: options.foreground || DEFAULT_FOREGROUND,
-                background: options.background || DEFAULT_BACKGROUND,
-                cursorVisible: options.cursorVisible !== false,
-                minHeight: number(options.minHeight, 320, 1, 5000),
-                reconnectDelay: options.reconnectDelay,
-                maxReconnectDelay: options.maxReconnectDelay,
-                heartbeat: options.heartbeat,
-                heartbeatTimeout: options.heartbeatTimeout,
-                connectTimeout: options.connectTimeout,
-                preferRecording: options.preferRecording === true,
-                fallbackToRecording: options.fallbackToRecording !== false
-            };
+            const delta = this.lastFrameAt
+                ? Math.min(
+                    100,
+                    timestamp - this.lastFrameAt
+                )
+                : 16.667;
+            this.lastFrameAt = timestamp;
+            this.elapsed += delta;
 
-            this.terminal = new AnsiCanvasTerminal(this.canvas, this.options);
-            this.client = new Client({
-                ...this.options,
-                columns: this.terminal.options.columns,
-                rows: this.terminal.options.rows
-            });
+            const targetInterval =
+                1000 / this.options.targetFPS;
 
-            this.running = false;
-            this.destroyed = false;
-            this.startedAt = null;
-            this.lastError = null;
-            this.disposers = [];
-            this.metrics = {
-                starts: 0,
-                stops: 0,
-                restarts: 0,
-                resizes: 0,
-                keys: 0,
-                bytes: 0,
-                errors: 0
-            };
-
-            this._keydown = event => this._handleKeydown(event);
-            this._dimensions = event => this._handleDimensions(event.detail);
-
-            this.canvas.addEventListener("cmatrix:dimensions", this._dimensions);
-
-            if (this.options.keyboard) {
-                if (this.canvas.tabIndex < 0) this.canvas.tabIndex = 0;
-                this.canvas.setAttribute(
-                    "aria-label",
-                    "Interactive cmatrix terminal visualization"
-                );
-                this.canvas.addEventListener("keydown", this._keydown);
+            if (
+                this.elapsed < targetInterval &&
+                !this.options.reducedMotion
+            ) {
+                this.animationFrame =
+                    window.requestAnimationFrame(
+                        (nextTimestamp) =>
+                            this.draw(nextTimestamp)
+                    );
+                return;
             }
 
-            this._bindClient();
-            this.canvas[CONTROLLER_SYMBOL] = this;
-            this.canvas.cmatrixController = this;
-            if (this.context) this.context.cmatrixController = this;
-            if (this.options.autoStart) this.start();
+            const drawDelta = this.elapsed;
+            this.elapsed = 0;
+
+            const width =
+                this.canvas.clientWidth;
+            const height =
+                this.canvas.clientHeight;
+
+            this.context.globalAlpha = 1;
+            this.context.shadowBlur = 0;
+            this.context.fillStyle =
+                this._trailColor();
+            this.context.fillRect(
+                0,
+                0,
+                width,
+                height
+            );
+
+            for (const column of this.columns) {
+                this._drawColumn(
+                    column,
+                    drawDelta,
+                    width,
+                    height,
+                    timestamp
+                );
+            }
+
+            this._drawPulses(
+                width,
+                height,
+                drawDelta
+            );
+            this._drawRecordTokens(
+                width,
+                height
+            );
+
+            this.frame += 1;
+            this.metrics.frames += 1;
+            this.lastDrawAt = timestamp;
+            this._updatePerformance(drawDelta);
+
+            this.animationFrame =
+                window.requestAnimationFrame(
+                    (nextTimestamp) =>
+                        this.draw(nextTimestamp)
+                );
         }
 
-        _bindClient() {
-            const bind = (name, handler) => {
-                this.client.addEventListener(name, handler);
-                this.disposers.push(
-                    () => this.client.removeEventListener(name, handler)
-                );
+        _trailColor() {
+            const rgb = this._colorToRgb(
+                this.options.background
+            );
+
+            if (!rgb) {
+                return this.options.background;
+            }
+
+            return (
+                `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ` +
+                `${this.options.trail})`
+            );
+        }
+
+        _colorToRgb(color) {
+            const value = String(color || "").trim();
+
+            if (/^#[0-9a-f]{3}$/i.test(value)) {
+                return {
+                    r: parseInt(
+                        value[1] + value[1],
+                        16
+                    ),
+                    g: parseInt(
+                        value[2] + value[2],
+                        16
+                    ),
+                    b: parseInt(
+                        value[3] + value[3],
+                        16
+                    )
+                };
+            }
+
+            if (/^#[0-9a-f]{6}$/i.test(value)) {
+                return {
+                    r: parseInt(
+                        value.slice(1, 3),
+                        16
+                    ),
+                    g: parseInt(
+                        value.slice(3, 5),
+                        16
+                    ),
+                    b: parseInt(
+                        value.slice(5, 7),
+                        16
+                    )
+                };
+            }
+
+            const match = value.match(
+                /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/
+            );
+
+            if (!match) {
+                return null;
+            }
+
+            return {
+                r: Number(match[1]),
+                g: Number(match[2]),
+                b: Number(match[3])
             };
-
-            bind("data", event => {
-                const data = String(event.detail?.data || "");
-                this.metrics.bytes += new TextEncoder().encode(data).byteLength;
-                this.terminal.write(data);
-            });
-
-            bind("open", event => {
-                this.running = true;
-                this.startedAt ||= iso();
-                dispatch(this, "runtime:open", event.detail);
-            });
-
-            bind("close", event => {
-                this.running = false;
-                dispatch(this, "runtime:close", event.detail);
-            });
-
-            bind("ready", event => {
-                const columns = number(
-                    event.detail?.columns,
-                    this.terminal.options.columns,
-                    20,
-                    1000
-                );
-                const rows = number(
-                    event.detail?.rows,
-                    this.terminal.options.rows,
-                    10,
-                    500
-                );
-                this.terminal.setDimensions(columns, rows);
-                dispatch(this, "runtime:ready", event.detail);
-            });
-
-            bind("started", event => dispatch(this, "runtime:started", event.detail));
-
-            bind("exit", event => {
-                this.running = false;
-                dispatch(this, "runtime:exit", event.detail);
-            });
-
-            bind("reconnect", event => {
-                dispatch(this, "runtime:reconnect", event.detail);
-            });
-
-            bind("error", event => {
-                this.lastError = new Error(
-                    event.detail?.error ||
-                    "cmatrix runtime error."
-                );
-                this.metrics.errors += 1;
-                dispatch(this, "error", { error: this.lastError.message });
-            });
-
-            bind("state", event => {
-                dispatch(this, "runtime:state", event.detail);
-            });
         }
 
-        _handleDimensions(dimensions) {
-            if (!dimensions || this.destroyed) return;
-            this.options.columns = dimensions.columns;
-            this.options.rows = dimensions.rows;
-            this.client.resize(dimensions.columns, dimensions.rows);
-            this.metrics.resizes += 1;
-            dispatch(this, "resize", dimensions);
-        }
+        inject(record) {
+            const normalized = normalizeRecord(record);
 
-        _handleKeydown(event) {
-            const special = {
-                ArrowUp: "\u001b[A",
-                ArrowDown: "\u001b[B",
-                ArrowRight: "\u001b[C",
-                ArrowLeft: "\u001b[D",
-                Home: "\u001b[H",
-                End: "\u001b[F",
-                PageUp: "\u001b[5~",
-                PageDown: "\u001b[6~",
-                Insert: "\u001b[2~",
-                Delete: "\u001b[3~",
-                Escape: "\u001b",
-                Enter: "\r",
-                Backspace: "\u007f",
-                Tab: "\t"
-            };
+            if (!normalized) {
+                return null;
+            }
 
-            let data = special[event.key];
+            this.records.push(normalized);
 
-            if (!data && event.ctrlKey && event.key.length === 1) {
-                const code = event.key.toUpperCase().charCodeAt(0);
-                if (code >= 64 && code <= 95) {
-                    data = String.fromCharCode(code - 64);
+            while (
+                this.records.length >
+                this.options.maxInjectedRecords
+            ) {
+                this.records.shift();
+            }
+
+            const text = [
+                normalized.scientificName,
+                normalized.commonName,
+                normalized.rank,
+                normalized.provider
+            ].filter(Boolean).join("  │  ");
+
+            this.context.save();
+            this.context.font =
+                `600 12px ${this.options.fontFamily}`;
+            const width =
+                this.context.measureText(text).width;
+            this.context.restore();
+
+            this.pulses.push({
+                record: normalized,
+                text,
+                progress: 0,
+                lane: Math.floor(
+                    Math.random() * 6
+                ),
+                lanes: 6,
+                fontSize:
+                    10 +
+                    Math.floor(Math.random() * 4),
+                width
+            });
+
+            while (
+                this.pulses.length >
+                this.options.maxPulses
+            ) {
+                this.pulses.shift();
+            }
+
+            const terms = [
+                normalized.scientificName,
+                normalized.commonName,
+                normalized.rank,
+                normalized.provider
+            ].filter(Boolean);
+
+            if (terms.length) {
+                const glyphs = splitGraphemes(
+                    terms.join("")
+                );
+
+                for (
+                    let index = 0;
+                    index < Math.min(
+                        this.columns.length,
+                        glyphs.length * 2
+                    );
+                    index += 1
+                ) {
+                    const column =
+                        this.columns[
+                            Math.floor(
+                                Math.random() *
+                                this.columns.length
+                            )
+                        ];
+
+                    if (!column) {
+                        continue;
+                    }
+
+                    const position =
+                        Math.floor(
+                            Math.random() *
+                            column.glyphs.length
+                        );
+                    column.glyphs[position] =
+                        glyphs[
+                            Math.floor(
+                                Math.random() *
+                                glyphs.length
+                            )
+                        ];
                 }
             }
 
-            if (
-                !data &&
-                !event.metaKey &&
-                !event.altKey &&
-                event.key.length === 1
-            ) {
-                data = event.key;
+            this.metrics.injected += 1;
+            this.metrics.pulses += 1;
+
+            this._emit("inject", {
+                record: clone(normalized),
+                records: this.records.length,
+                pulses: this.pulses.length
+            });
+
+            return clone(normalized);
+        }
+
+        injectMany(records = []) {
+            const added = [];
+
+            for (const record of records) {
+                const normalized = this.inject(record);
+
+                if (normalized) {
+                    added.push(normalized);
+                }
             }
 
-            if (!data) return;
-            event.preventDefault();
-            this.sendKey(data);
+            return added;
         }
 
         start() {
             if (this.destroyed) {
-                throw new Error("cmatrix controller has been destroyed.");
+                throw new Error(
+                    "CMatrix controller has been destroyed."
+                );
             }
 
-            const status = this.client.status();
-            if (status.connected || status.connecting) return this;
+            if (this.running && !this.paused) {
+                return this;
+            }
 
-            this.client.connect();
+            this.running = true;
+            this.paused = false;
+            this.lastFrameAt = 0;
+            this.elapsed = 0;
+            this.startedAt =
+                this.startedAt || iso();
             this.metrics.starts += 1;
-            dispatch(this, "start", { args: [...this.options.args] });
-            return this;
-        }
 
-        resume() {
-            return this.start();
+            if (this.options.reducedMotion) {
+                this.drawStatic();
+            } else {
+                this.animationFrame =
+                    window.requestAnimationFrame(
+                        (timestamp) =>
+                            this.draw(timestamp)
+                    );
+            }
+
+            this._emit("start", {});
+            return this;
         }
 
         stop() {
-            if (this.destroyed) return this;
-            this.client.disconnect(1000, "cmatrix stopped");
+            const wasRunning =
+                this.running || this.paused;
+
             this.running = false;
-            this.metrics.stops += 1;
-            dispatch(this, "stop", {});
-            return this;
-        }
+            this.paused = false;
 
-        pause() {
-            return this.stop();
-        }
-
-        restart() {
-            if (this.destroyed) {
-                throw new Error("cmatrix controller has been destroyed.");
+            if (this.animationFrame) {
+                window.cancelAnimationFrame(
+                    this.animationFrame
+                );
+                this.animationFrame = 0;
             }
-            this.client.restart();
-            this.metrics.restarts += 1;
-            dispatch(this, "restart", { args: [...this.options.args] });
+
+            if (wasRunning) {
+                this.metrics.stops += 1;
+                this._emit("stop", {});
+            }
+
             return this;
+        }
+
+        pause(options = {}) {
+            if (!this.running || this.paused) {
+                return false;
+            }
+
+            this.paused = true;
+
+            if (this.animationFrame) {
+                window.cancelAnimationFrame(
+                    this.animationFrame
+                );
+                this.animationFrame = 0;
+            }
+
+            if (options.automatic !== true) {
+                this._emit("pause", {});
+            }
+
+            return true;
+        }
+
+        resume(options = {}) {
+            if (!this.running) {
+                this.start();
+                return true;
+            }
+
+            if (!this.paused) {
+                return false;
+            }
+
+            this.paused = false;
+            this.lastFrameAt = 0;
+
+            if (!this.options.reducedMotion) {
+                this.animationFrame =
+                    window.requestAnimationFrame(
+                        (timestamp) =>
+                            this.draw(timestamp)
+                    );
+            } else {
+                this.drawStatic();
+            }
+
+            if (options.automatic !== true) {
+                this._emit("resume", {});
+            }
+
+            return true;
+        }
+
+        drawStatic() {
+            const width =
+                this.canvas.clientWidth;
+            const height =
+                this.canvas.clientHeight;
+
+            this.context.fillStyle =
+                this.options.background;
+            this.context.fillRect(
+                0,
+                0,
+                width,
+                height
+            );
+
+            for (const column of this.columns) {
+                this._drawColumn(
+                    column,
+                    0,
+                    width,
+                    height,
+                    now()
+                );
+            }
         }
 
         clear() {
-            this.terminal.reset();
-            dispatch(this, "clear", {});
+            this.context.globalAlpha = 1;
+            this.context.shadowBlur = 0;
+            this.context.fillStyle =
+                this.options.background;
+            this.context.fillRect(
+                0,
+                0,
+                this.canvas.clientWidth,
+                this.canvas.clientHeight
+            );
             return this;
+        }
+
+        reset() {
+            this.records = [];
+            this.pulses = [];
+            this.frame = 0;
+            this.scale = 1;
+            this.fpsSamples = [];
+            this.resize();
+
+            for (const column of this.columns) {
+                this._resetColumn(
+                    column,
+                    this.canvas.clientHeight
+                );
+            }
+
+            this.clear();
+            this._emit("reset", {});
+            return this;
+        }
+
+        applyPreset(name) {
+            if (!PRESETS[name]) {
+                throw new Error(
+                    `Unknown CMatrix preset: ${name}`
+                );
+            }
+
+            const preset = PRESETS[name];
+
+            this.update({
+                ...preset,
+                preset: name
+            });
+
+            return this.status();
+        }
+
+        setBanks(banks, weights = this.options.weights) {
+            this.options.banks =
+                normalizeBanks(banks);
+            this.options.weights = {
+                ...DEFAULT_BANK_WEIGHTS,
+                ...weights
+            };
+            this.pool.configure(
+                this.options.banks,
+                this.options.weights
+            );
+
+            for (const column of this.columns) {
+                column.glyphs = Array.from(
+                    { length: column.length },
+                    () => this.pool.random()
+                );
+            }
+
+            this._emit("banks", {
+                banks: [...this.options.banks]
+            });
+
+            return [...this.options.banks];
         }
 
         update(options = {}) {
-            if (!object(options)) {
-                throw new TypeError("cmatrix configuration must be an object.");
+            if (!isObject(options)) {
+                throw new TypeError(
+                    "CMatrix options must be an object."
+                );
             }
 
-            if (options.args !== undefined) {
-                this.options.args = Array.isArray(options.args)
-                    ? [...options.args]
-                    : [];
+            const resizeRequired =
+                options.fontSize !== undefined ||
+                options.layers !== undefined;
+
+            if (options.preset && PRESETS[options.preset]) {
+                const preset = PRESETS[options.preset];
+                options = {
+                    ...preset,
+                    ...options
+                };
+            }
+
+            if (options.banks !== undefined) {
+                this.setBanks(
+                    options.banks,
+                    options.weights ||
+                    this.options.weights
+                );
+            } else if (options.weights !== undefined) {
+                this.setBanks(
+                    this.options.banks,
+                    options.weights
+                );
+            }
+
+            const numberFields = {
+                fontSize: [
+                    MIN_FONT_SIZE,
+                    MAX_FONT_SIZE
+                ],
+                speed: [0.05, 20],
+                baseSpeed: [0.05, 20],
+                density: [0.01, 1],
+                trail: [0.005, 1],
+                opacity: [0.01, 1],
+                glow: [0, 40],
+                minLength: [2, 100],
+                maxLength: [2, 200],
+                layers: [1, 8],
+                maxInjectedRecords: [1, 10000],
+                maxPulses: [1, 1000],
+                pulseSpeed: [0.001, 0.2],
+                tokenOpacity: [0.01, 1],
+                targetFPS: [15, 144]
+            };
+
+            for (const [
+                key,
+                [minimum, maximum]
+            ] of Object.entries(numberFields)) {
+                if (options[key] === undefined) {
+                    continue;
+                }
+
+                const targetKey =
+                    key === "baseSpeed"
+                        ? "speed"
+                        : key;
+
+                this.options[targetKey] =
+                    parseNumber(
+                        options[key],
+                        this.options[targetKey],
+                        minimum,
+                        maximum
+                    );
+            }
+
+            for (const key of [
+                "fontFamily",
+                "foreground",
+                "highlight",
+                "background",
+                "preset"
+            ]) {
+                if (options[key] !== undefined) {
+                    this.options[key] =
+                        String(options[key]);
+                }
+            }
+
+            for (const key of [
+                "adaptive",
+                "pauseWhenHidden",
+                "reducedMotion"
+            ]) {
+                if (options[key] !== undefined) {
+                    this.options[key] =
+                        Boolean(options[key]);
+                }
             }
 
             if (
-                options.endpoint !== undefined ||
-                options.socketURL !== undefined
+                this.options.maxLength <
+                this.options.minLength
             ) {
-                this.options.endpoint =
-                    options.endpoint ||
-                    options.socketURL;
+                this.options.maxLength =
+                    this.options.minLength;
             }
 
-            if (options.recordingURL !== undefined) {
-                this.options.recordingURL = options.recordingURL;
+            for (const column of this.columns) {
+                column.speed =
+                    Math.max(
+                        0.05,
+                        column.speed
+                    );
+                column.active =
+                    Math.random() <=
+                    this.options.density;
             }
 
-            for (
-                const key of [
-                    "foreground",
-                    "background",
-                    "fontFamily",
-                    "cursorVisible",
-                    "autoReconnect",
-                    "keyboard",
-                    "preferRecording",
-                    "fallbackToRecording",
-                    "minHeight"
-                ]
-            ) {
-                if (options[key] !== undefined) {
-                    this.options[key] = options[key];
-                }
+            if (resizeRequired) {
+                this.resize();
             }
 
-            this.terminal.configure(options);
-            this.client.configure({
-                ...options,
-                endpoint: this.options.endpoint,
-                recordingURL: this.options.recordingURL,
-                args: this.options.args
+            this._emit("update", {
+                options: clone(this.options)
             });
-            dispatch(this, "update", {
-                options: {
-                    ...this.options,
-                    args: [...this.options.args]
-                }
-            });
+
             return this;
         }
 
-        setArgs(args = [], restart = false) {
-            this.options.args = Array.isArray(args) ? [...args] : [];
-            this.client.configure({ args: this.options.args });
-            if (restart) this.restart();
-            return [...this.options.args];
-        }
-
-        sendKey(key) {
-            const sent = this.client.input(String(key));
-            if (sent) this.metrics.keys += 1;
-            return sent;
+        snapshot() {
+            return {
+                status: this.status(),
+                records: this.records.map(clone),
+                pulses: this.pulses.map(
+                    (pulse) => ({
+                        record: clone(pulse.record),
+                        progress: pulse.progress,
+                        lane: pulse.lane
+                    })
+                )
+            };
         }
 
         status() {
+            const averageFPS =
+                this.fpsSamples.length
+                    ? this.fpsSamples.reduce(
+                        (total, value) =>
+                            total + value,
+                        0
+                    ) /
+                      this.fpsSamples.length
+                    : 0;
+
             return {
                 name: "cmatrix",
                 module: MODULE_NAME,
-                version: VERSION,
                 running: this.running,
+                paused: this.paused,
                 startedAt: this.startedAt,
-                endpoint: this.options.endpoint,
-                recordingURL: this.options.recordingURL,
-                args: [...this.options.args],
-                dimensions: {
-                    columns: this.terminal.options.columns,
-                    rows: this.terminal.options.rows
-                },
-                runtime: this.client.status(),
+                preset: this.options.preset,
+                banks: this.pool.status(),
+                records: this.records.length,
+                pulses: this.pulses.length,
+                columns: this.columns.length,
+                scale: this.scale,
+                averageFPS:
+                    Number(
+                        averageFPS.toFixed(2)
+                    ),
+                options: clone(this.options),
                 metrics: { ...this.metrics },
                 lastError: this.lastError
                     ? {
@@ -1351,268 +1693,242 @@ Licensed under the MIT License.
                         message: this.lastError.message
                     }
                     : null,
-                destroyed: this.destroyed,
-                upstream: "https://github.com/abishekvashok/cmatrix"
+                destroyed: this.destroyed
             };
         }
 
         destroy() {
-            if (this.destroyed) return false;
+            if (this.destroyed) {
+                return false;
+            }
 
-            this.canvas.removeEventListener("keydown", this._keydown);
-            this.canvas.removeEventListener(
-                "cmatrix:dimensions",
-                this._dimensions
+            this.stop();
+            document.removeEventListener(
+                "visibilitychange",
+                this._visibilityHandler
             );
-
-            for (const dispose of this.disposers.splice(0)) {
-                try {
-                    dispose();
-                } catch (_error) {
-                    /* noop */
-                }
-            }
-
-            this.client.destroy();
-            this.terminal.destroy();
-
-            if (this.canvas[CONTROLLER_SYMBOL] === this) {
-                delete this.canvas[CONTROLLER_SYMBOL];
-            }
-            if (this.canvas.cmatrixController === this) {
-                delete this.canvas.cmatrixController;
-            }
-            if (this.context?.cmatrixController === this) {
-                delete this.context.cmatrixController;
-            }
-
+            this._cleanupResize?.();
+            this.records = [];
+            this.pulses = [];
+            this.columns = [];
             this.destroyed = true;
-            dispatch(this, "destroy", {});
+            this._emit("destroy", {});
             return true;
         }
     }
 
     function mount(target, options = {}) {
-        const canvas = resolveCanvas(target);
-        const existing =
-            canvas[CONTROLLER_SYMBOL] ||
-            canvas.cmatrixController;
-
-        if (
-            existing instanceof CmatrixController &&
-            !existing.destroyed
-        ) {
-            existing.update(options);
-            return existing;
-        }
-
-        return new CmatrixController(canvas, options);
+        return new CMatrixController(
+            target,
+            options
+        );
     }
 
-    function render(_data, options = {}) {
-        const container = document.createElement("section");
+    function render(data = [], options = {}) {
+        const container =
+            document.createElement("section");
+
         container.className =
             "terminal-visualization terminal-visualization-cmatrix";
-        container.dataset.visualization = "cmatrix";
+        container.dataset.visualization =
+            "cmatrix";
 
-        const canvas = document.createElement("canvas");
-        canvas.className = "terminal-cmatrix-canvas";
-        canvas.style.width = "100%";
-        canvas.style.height = "100%";
-        canvas.style.minHeight =
-            `${number(options.minHeight, 320, 1, 5000)}px`;
+        const canvas =
+            document.createElement("canvas");
+        canvas.className =
+            "terminal-cmatrix-canvas";
+        canvas.setAttribute(
+            "aria-label",
+            "Speciedex CMatrix visualization"
+        );
 
-        const status = document.createElement("div");
-        status.className = "terminal-cmatrix-status";
-        status.setAttribute("aria-live", "polite");
+        const status =
+            document.createElement("div");
+        status.className =
+            "terminal-cmatrix-status";
+        status.setAttribute(
+            "aria-live",
+            "polite"
+        );
 
-        container.append(canvas, status);
+        container.append(
+            canvas,
+            status
+        );
 
-        const controller = mount(canvas, options);
+        const controller =
+            mount(canvas, options);
 
-        const refresh = () => {
-            const snapshot = controller.status();
-            status.textContent = snapshot.lastError
-                ? `cmatrix error: ${snapshot.lastError.message}`
-                : snapshot.runtime.connecting
-                    ? "cmatrix connecting"
-                    : snapshot.running
-                        ? `cmatrix running (${snapshot.runtime.mode})`
-                        : "cmatrix stopped";
+        const records = Array.isArray(data)
+            ? data
+            : data
+                ? [data]
+                : [];
+
+        controller.injectMany(records);
+
+        const updateStatus = () => {
+            const snapshot =
+                controller.status();
+
+            status.textContent =
+                snapshot.running
+                    ? (
+                        `CMatrix active · ${snapshot.columns} columns · ` +
+                        `${snapshot.records} records · ` +
+                        `${snapshot.averageFPS} fps`
+                    )
+                    : "CMatrix stopped";
         };
 
-        for (
-            const eventName of [
-                "start",
-                "stop",
-                "error",
-                "runtime:open",
-                "runtime:close",
-                "runtime:state"
-            ]
-        ) {
-            controller.addEventListener(eventName, refresh);
+        for (const eventName of [
+            "start",
+            "stop",
+            "pause",
+            "resume",
+            "inject",
+            "resize",
+            "update"
+        ]) {
+            controller.addEventListener(
+                eventName,
+                updateStatus
+            );
         }
 
-        refresh();
+        updateStatus();
 
-        container.controller = controller;
-        container.cmatrixController = controller;
-        container[CONTROLLER_SYMBOL] = controller;
-        container.update = next => controller.update(next);
-        container.status = () => controller.status();
-        container.destroy = () => controller.destroy();
+        container.controller =
+            controller;
+        container.destroy = () =>
+            controller.destroy();
 
         return container;
     }
 
     function initialize(context = {}) {
-        const root = context.root || document;
-        const existing = context.cmatrix || root[SYMBOL];
-
-        if (existing?.Controller === CmatrixController) {
-            context.cmatrix = existing;
-            context.registerVisualization?.("cmatrix", existing);
-            context.registerRenderer?.("cmatrix", existing);
-            return existing;
-        }
-
-        const dataset = context.root?.dataset || {};
-        const config = context.config?.cmatrix || {};
+        const dataset =
+            context.root?.dataset || {};
+        const config =
+            context.config?.cmatrix || {};
 
         const defaults = {
-            context,
-            endpoint:
-                dataset.terminalCmatrixSocket ||
-                config.endpoint ||
-                config.socketURL ||
-                "/api/terminal/cmatrix",
-            recordingURL:
-                dataset.terminalCmatrixRecording ||
-                config.recordingURL ||
-                "/static/data/cmatrix/cmatrix-recording.json",
-            args: Array.isArray(config.args) ? [...config.args] : [],
-            autoReconnect:
-                dataset.terminalCmatrixReconnect !== "false" &&
-                config.autoReconnect !== false,
-            fallbackToRecording:
-                dataset.terminalCmatrixFallback !== "false" &&
-                config.fallbackToRecording !== false,
-            preferRecording:
-                dataset.terminalCmatrixPreferRecording === "true" ||
-                config.preferRecording === true,
+            preset:
+                dataset.terminalCmatrixPreset ||
+                config.preset ||
+                "cmatrix",
+
+            banks:
+                dataset.terminalCmatrixBanks
+                    ? dataset.terminalCmatrixBanks.split(",")
+                    : config.banks,
+
+            fontFamily:
+                dataset.terminalCmatrixFontFamily ||
+                config.fontFamily,
+
+            fontSize:
+                dataset.terminalCmatrixFontSize ||
+                config.fontSize,
+
+            speed:
+                dataset.terminalCmatrixSpeed ||
+                config.speed,
+
+            density:
+                dataset.terminalCmatrixDensity ||
+                config.density,
+
+            trail:
+                dataset.terminalCmatrixTrail ||
+                config.trail,
+
             foreground:
                 dataset.terminalCmatrixForeground ||
-                config.foreground ||
-                DEFAULT_FOREGROUND,
+                config.foreground,
+
+            highlight:
+                dataset.terminalCmatrixHighlight ||
+                config.highlight,
+
             background:
                 dataset.terminalCmatrixBackground ||
-                config.background ||
-                DEFAULT_BACKGROUND,
-            minHeight:
-                dataset.terminalCmatrixMinHeight ||
-                config.minHeight ||
-                320
+                config.background,
+
+            adaptive: parseBoolean(
+                dataset.terminalCmatrixAdaptive,
+                config.adaptive !== false
+            ),
+
+            autoStart: parseBoolean(
+                dataset.terminalCmatrixAutostart,
+                config.autoStart !== false
+            ),
+
+            pauseWhenHidden: parseBoolean(
+                dataset.terminalCmatrixPauseWhenHidden,
+                config.pauseWhenHidden !== false
+            )
         };
 
-        const controllers = new Set();
-
         const visualization = {
-            name: "cmatrix",
-            version: VERSION,
-
             mount(target, options = {}) {
-                const controller = mount(
+                return mount(
                     target,
                     {
                         ...defaults,
-                        ...options,
-                        context
+                        ...options
                     }
                 );
-
-                controllers.add(controller);
-                controller.addEventListener(
-                    "destroy",
-                    () => controllers.delete(controller),
-                    { once: true }
-                );
-                context.cmatrixController = controller;
-                return controller;
             },
 
             render(data, options = {}) {
-                const element = render(
+                return render(
                     data,
                     {
                         ...defaults,
-                        ...options,
-                        context
+                        ...options
                     }
                 );
-
-                controllers.add(element.controller);
-                element.controller.addEventListener(
-                    "destroy",
-                    () => controllers.delete(element.controller),
-                    { once: true }
-                );
-                context.cmatrixController = element.controller;
-                return element;
             },
 
-            activeController() {
-                return (
-                    context.cmatrixController ||
-                    context.terminalSplash?.cmatrixController ||
-                    context.terminalSplash?.matrixController ||
-                    Array.from(controllers).at(-1) ||
-                    null
-                );
-            },
+            Controller:
+                CMatrixController,
 
-            status() {
-                return {
-                    name: "cmatrix",
-                    version: VERSION,
-                    controllers: controllers.size,
-                    active: this.activeController()?.status() || null
-                };
-            },
+            GlyphPool:
+                WeightedGlyphPool,
 
-            destroy() {
-                for (const controller of Array.from(controllers)) {
-                    controller.destroy();
-                }
-                controllers.clear();
+            glyphBanks:
+                GLYPH_BANKS,
 
-                if (root[SYMBOL] === visualization) {
-                    delete root[SYMBOL];
-                }
-                if (context.cmatrix === visualization) {
-                    delete context.cmatrix;
-                }
-                if (context.cmatrixController) {
-                    delete context.cmatrixController;
-                }
-
-                return true;
-            },
-
-            Controller: CmatrixController,
-            AnsiCanvasTerminal,
-            upstream: "https://github.com/abishekvashok/cmatrix"
+            presets:
+                PRESETS
         };
 
-        root[SYMBOL] = visualization;
-        context.cmatrix = visualization;
-        context.registerVisualization?.("cmatrix", visualization);
-        context.registerRenderer?.("cmatrix", visualization);
+        context.registerVisualization?.(
+            "cmatrix",
+            visualization
+        );
 
-        dispatch(document, "speciedex:terminal-cmatrix-ready", {
-            visualization,
-            version: VERSION
-        });
+        context.registerRenderer?.(
+            "cmatrix",
+            visualization
+        );
+
+        context.cmatrix =
+            visualization;
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-cmatrix-ready",
+            {
+                visualization,
+                presets:
+                    Object.keys(PRESETS),
+                banks:
+                    Object.keys(GLYPH_BANKS)
+            }
+        );
 
         return visualization;
     }
@@ -1620,97 +1936,233 @@ Licensed under the MIT License.
     const commands = [{
         name: "cmatrix",
         category: "visualization",
-        description: "Control the upstream cmatrix PTY visualization.",
-        usage: "cmatrix [status|start|stop|restart|clear|args|key|config]",
-        handler: async ({
+        description:
+            "Control CMatrix using the native ZMatrix canvas renderer and CMatrix character set.",
+        usage:
+            "cmatrix [status|start|stop|restart|pause|resume|clear|reset|preset|" +
+            "banks|speed|density|font-size|snapshot|config|args|key]",
+        handler: ({
             args = [],
             context,
-            writeJSON,
             write,
+            writeJSON,
             writeError
         }) => {
-            const action = String(args[0] || "status").toLowerCase();
-            const visualization = context.cmatrix || initialize(context);
             const controller =
-                context.terminalSplash?.cmatrixController ||
                 (
                     context.terminalSplash?.options?.matrixMode === "cmatrix"
                         ? context.terminalSplash?.matrixController
                         : null
                 ) ||
-                context.cmatrixController ||
-                visualization.activeController();
+                context.cmatrixController;
 
             if (!controller) {
-                throw new Error("No mounted cmatrix controller is available.");
+                throw new Error(
+                    "No mounted CMatrix controller is available."
+                );
             }
 
+            const action =
+                String(
+                    args[0] || "status"
+                ).toLowerCase();
+            const value =
+                args[1];
+
             try {
-                if (["status", "show", "info"].includes(action)) {
-                    return writeJSON
-                        ? writeJSON(controller.status())
-                        : controller.status();
-                }
-
-                if (action === "start") {
-                    controller.start();
-                    return write
-                        ? write("cmatrix started.", "success")
-                        : controller.status();
-                }
-
-                if (action === "stop") {
-                    controller.stop();
-                    return write
-                        ? write("cmatrix stopped.", "success")
-                        : controller.status();
-                }
-
-                if (action === "restart") {
-                    controller.restart();
-                    return write
-                        ? write("cmatrix restarted.", "success")
-                        : controller.status();
-                }
-
-                if (action === "clear") {
-                    controller.clear();
-                    return write
-                        ? write("cmatrix terminal cleared.", "success")
-                        : controller.status();
-                }
-
-                if (action === "args") {
-                    const output = args.length === 1
-                        ? { args: controller.options.args }
-                        : { args: controller.setArgs(args.slice(1), false) };
-                    return writeJSON ? writeJSON(output) : output;
-                }
-
-                if (action === "key") {
-                    if (!args[1]) {
-                        throw new Error(
-                            "Usage: cmatrix key <character-or-sequence>"
+                switch (action) {
+                    case "status":
+                    case "show":
+                    case "info":
+                        return writeJSON(
+                            controller.status()
                         );
-                    }
-                    controller.sendKey(args.slice(1).join(" "));
-                    return write
-                        ? write("Input sent to cmatrix.", "success")
-                        : true;
-                }
 
-                if (action === "config") {
-                    return writeJSON
-                        ? writeJSON(controller.status())
-                        : controller.status();
-                }
+                    case "start":
+                        controller.start();
+                        return write(
+                            "CMatrix visualization started.",
+                            "success"
+                        );
 
-                throw new Error(`Unknown cmatrix action "${action}".`);
+                    case "stop":
+                        controller.stop();
+                        return write(
+                            "CMatrix visualization stopped.",
+                            "success"
+                        );
+
+                    case "pause":
+                        controller.pause();
+                        return write(
+                            "CMatrix visualization paused.",
+                            "success"
+                        );
+
+                    case "resume":
+                        controller.resume();
+                        return write(
+                            "CMatrix visualization resumed.",
+                            "success"
+                        );
+
+                    case "restart":
+                        controller.reset();
+                        controller.start();
+                        return write(
+                            "CMatrix visualization restarted.",
+                            "success"
+                        );
+
+                    case "config":
+                        return writeJSON(
+                            controller.status()
+                        );
+
+                    case "args":
+                        return writeJSON({
+                            mode: "browser-native",
+                            args: [],
+                            note: "CMatrix now uses the ZMatrix canvas engine; no PTY arguments are required."
+                        });
+
+                    case "key":
+                        if (!args[1]) {
+                            throw new Error(
+                                "Usage: cmatrix key <character-or-sequence>"
+                            );
+                        }
+
+                        controller.inject({
+                            scientific_name: args.slice(1).join(" "),
+                            provider: "cmatrix-key"
+                        });
+
+                        return write(
+                            "Input injected into CMatrix.",
+                            "success"
+                        );
+
+                    case "clear":
+                        controller.clear();
+                        return write(
+                            "CMatrix canvas cleared.",
+                            "success"
+                        );
+
+                    case "reset":
+                        controller.reset();
+                        return write(
+                            "CMatrix visualization reset.",
+                            "success"
+                        );
+
+                    case "preset":
+                        if (!value) {
+                            return writeJSON({
+                                current:
+                                    controller.options.preset,
+                                available:
+                                    Object.keys(PRESETS)
+                            });
+                        }
+
+                        return writeJSON(
+                            controller.applyPreset(value)
+                        );
+
+                    case "banks":
+                        if (!value) {
+                            return writeJSON({
+                                active:
+                                    controller.options.banks,
+                                available:
+                                    Object.keys(GLYPH_BANKS)
+                            });
+                        }
+
+                        return writeJSON({
+                            banks:
+                                controller.setBanks(
+                                    args.slice(1).join(",")
+                                )
+                        });
+
+                    case "speed":
+                        if (value === undefined) {
+                            return writeJSON({
+                                speed:
+                                    controller.options.speed
+                            });
+                        }
+
+                        controller.update({
+                            speed: value
+                        });
+
+                        return writeJSON({
+                            speed:
+                                controller.options.speed
+                        });
+
+                    case "density":
+                        if (value === undefined) {
+                            return writeJSON({
+                                density:
+                                    controller.options.density
+                            });
+                        }
+
+                        controller.update({
+                            density: value
+                        });
+
+                        return writeJSON({
+                            density:
+                                controller.options.density
+                        });
+
+                    case "font-size":
+                    case "fontsize":
+                        if (value === undefined) {
+                            return writeJSON({
+                                fontSize:
+                                    controller.options.fontSize
+                            });
+                        }
+
+                        controller.update({
+                            fontSize: value
+                        });
+
+                        return writeJSON({
+                            fontSize:
+                                controller.options.fontSize
+                        });
+
+                    case "snapshot":
+                        return writeJSON(
+                            controller.snapshot()
+                        );
+
+                    default:
+                        throw new Error(
+                            `Unknown cmatrix action "${action}". Use status, ` +
+                            "start, stop, restart, pause, resume, clear, reset, preset, " +
+                            "banks, speed, density, font-size, snapshot, config, args, or key."
+                        );
+                }
             } catch (error) {
-                if (writeError) {
-                    writeError(error.message);
+                if (
+                    typeof writeError ===
+                    "function"
+                ) {
+                    writeError(
+                        error.message
+                    );
                     return null;
                 }
+
                 throw error;
             }
         }
@@ -1718,32 +2170,40 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
-        version: VERSION,
-        SYMBOL,
-        CONTROLLER_SYMBOL,
-        CmatrixController,
-        AnsiCanvasTerminal,
+        engine: "zmatrix-canvas",
+        upstream: "https://github.com/abishekvashok/cmatrix",
+        characterSet: CMATRIX_CHARACTERS,
+        CMatrixController,
+        WeightedGlyphPool,
+        GLYPH_BANKS,
+        PRESETS,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
-        commands,
-        upstream: "https://github.com/abishekvashok/cmatrix"
+        commands
     });
 
-    window.SpeciedexTerminalCmatrix = api;
+    window.SpeciedexTerminalCmatrix =
+        api;
+
     window.SpeciedexTerminalModules =
         window.SpeciedexTerminalModules || {};
-    window.SpeciedexTerminalModules[MODULE_NAME] = api;
 
-    document.dispatchEvent(new CustomEvent(
-        "speciedex:terminal-module-available",
-        {
-            detail: {
-                name: MODULE_NAME,
-                module: api
+    window.SpeciedexTerminalModules[
+        MODULE_NAME
+    ] = api;
+
+    document.dispatchEvent(
+        new CustomEvent(
+            "speciedex:terminal-module-available",
+            {
+                detail: {
+                    name: MODULE_NAME,
+                    module: api
+                }
             }
-        }
-    ));
+        )
+    );
 })(window, document);
