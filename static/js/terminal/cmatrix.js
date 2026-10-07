@@ -246,6 +246,7 @@ Licensed under the MIT License.
                     break;
                 case "exit":
                     dispatch(this, "exit", message);
+                    if (Number(message.code) !== 0 && !this.manualClose && this.options.fallbackToRecording) this._fallbackOrFail(this.generation);
                     break;
                 case "pong":
                     this.lastPongAt = iso();
