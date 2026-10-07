@@ -1,0 +1,3076 @@
+{
+  "records": [
+    {
+      "authorship": "",
+      "canonical_name": "incertae sedis",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "incertae sedis|kingdom|incertae sedis|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "0",
+        "url": "https://api.gbif.org/v1/species/0"
+      },
+      "rank": "kingdom",
+      "schema_version": 1,
+      "scientific_name": "incertae sedis",
+      "speciedex_id": "spx:sha256:51b4e75ef19da8f6ca5f0788250e6311a93da7a13bd116e456911526cf258f21",
+      "status": "doubtful",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "incertae sedis",
+        "order": "",
+        "phylum": ""
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Animalia",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "animalia|kingdom|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "1",
+        "url": "https://api.gbif.org/v1/species/1"
+      },
+      "rank": "kingdom",
+      "schema_version": 1,
+      "scientific_name": "Animalia",
+      "speciedex_id": "spx:sha256:83d54154ec427e08786ae018b034ce636918f2852b16e368dcec579a1ffa36fe",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": ""
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Archaea",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "archaea|kingdom|archaea|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "2",
+        "url": "https://api.gbif.org/v1/species/2"
+      },
+      "rank": "kingdom",
+      "schema_version": 1,
+      "scientific_name": "Archaea",
+      "speciedex_id": "spx:sha256:ce987824928697d5575fb9abee74354bab4b5470ab869fc194a8346e8d9f5d87",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Archaea",
+        "order": "",
+        "phylum": ""
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Bacteria",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "bacteria|kingdom|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "3",
+        "url": "https://api.gbif.org/v1/species/3"
+      },
+      "rank": "kingdom",
+      "schema_version": 1,
+      "scientific_name": "Bacteria",
+      "speciedex_id": "spx:sha256:8fb4e091e7f2a0ac9f22a4757dd3d6e95091c74bb2e82b9be4c7d598e70fc5b6",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": ""
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Chromista",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "chromista|kingdom|chromista|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "4",
+        "url": "https://api.gbif.org/v1/species/4"
+      },
+      "rank": "kingdom",
+      "schema_version": 1,
+      "scientific_name": "Chromista",
+      "speciedex_id": "spx:sha256:d06a1dcec7331e621a24d6bbc23c5a1901db505ef19c9da850fd7e1749629142",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Chromista",
+        "order": "",
+        "phylum": ""
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Fungi",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "fungi|kingdom|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "5",
+        "url": "https://api.gbif.org/v1/species/5"
+      },
+      "rank": "kingdom",
+      "schema_version": 1,
+      "scientific_name": "Fungi",
+      "speciedex_id": "spx:sha256:ed34afce0f9cd5c83497a25558ac35d3038d17ef5d4eb49b1af0d56ea3396985",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": ""
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Plantae",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "plantae|kingdom|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "6",
+        "url": "https://api.gbif.org/v1/species/6"
+      },
+      "rank": "kingdom",
+      "schema_version": 1,
+      "scientific_name": "Plantae",
+      "speciedex_id": "spx:sha256:28b7793118e7bdd20372c923afe6f794f1a50568c61ed623e3c2d90a2a059f70",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": ""
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Protozoa",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "protozoa|kingdom|protozoa|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "7",
+        "url": "https://api.gbif.org/v1/species/7"
+      },
+      "rank": "kingdom",
+      "schema_version": 1,
+      "scientific_name": "Protozoa",
+      "speciedex_id": "spx:sha256:9021ac734c99b5ff4fe1581bf4e89a3968f2cb47f470267745d5b5fa5300ffde",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Protozoa",
+        "order": "",
+        "phylum": ""
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Viruses",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "viruses|kingdom|viruses|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "8",
+        "url": "https://api.gbif.org/v1/species/8"
+      },
+      "rank": "kingdom",
+      "schema_version": 1,
+      "scientific_name": "Viruses",
+      "speciedex_id": "spx:sha256:941faa80b46328b935ae78329b6bf72c06c73859190c4f1e3daa5214e5e37f9a",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Viruses",
+        "order": "",
+        "phylum": ""
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Marchantiophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "marchantiophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "9",
+        "url": "https://api.gbif.org/v1/species/9"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Marchantiophyta",
+      "speciedex_id": "spx:sha256:c5e05912fd1f5223c9577cddb537ce2903ec34c8cfb24c3370b60faba95d2d61",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Marchantiophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Ginkgophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "ginkgophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "11",
+        "url": "https://api.gbif.org/v1/species/11"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Ginkgophyta",
+      "speciedex_id": "spx:sha256:401fc6596a72173aa2b763a7aa1617f3e0b9677e95a3ec0b73a55a53ec0e4e47",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Tracheophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Lycopodiophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "lycopodiophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "12",
+        "url": "https://api.gbif.org/v1/species/12"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Lycopodiophyta",
+      "speciedex_id": "spx:sha256:19151316c7eb3962b3f7c5bb7676f307fac718641848a4f77648c2d387bf71b5",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Tracheophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Anthocerotophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "anthocerotophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "13",
+        "url": "https://api.gbif.org/v1/species/13"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Anthocerotophyta",
+      "speciedex_id": "spx:sha256:28001f8e7ec0bf6048d847b22461efcd545338e81093a66fbe2e8a3f4fea323b",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Anthocerotophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Tardigrada",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "tardigrada|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "14",
+        "url": "https://api.gbif.org/v1/species/14"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Tardigrada",
+      "speciedex_id": "spx:sha256:c96efb9014d28b98211b4fb6623b1c11482540c4c1c1065241d7f3594a5d819a",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Tardigrada"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Neocallimastigomycota",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "neocallimastigomycota|phylum|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "17",
+        "url": "https://api.gbif.org/v1/species/17"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Neocallimastigomycota",
+      "speciedex_id": "spx:sha256:2c65e775483a075a4188f88001a7dec029613d90249d4bc82b64faab491ae9b4",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Neocallimastigomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Glomeromycota",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "glomeromycota|phylum|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "18",
+        "url": "https://api.gbif.org/v1/species/18"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Glomeromycota",
+      "speciedex_id": "spx:sha256:b99d61bf864d72ef78db8e94f79cf729207590560034f5423df2023deb187576",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Glomeromycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Phoronida",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "phoronida|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "19",
+        "url": "https://api.gbif.org/v1/species/19"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Phoronida",
+      "speciedex_id": "spx:sha256:086b982045651e8880541faba691dc38be3c3eb7984e1253189f6b8daa362310",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Phoronida"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Gastrotricha",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "gastrotricha|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "22",
+        "url": "https://api.gbif.org/v1/species/22"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Gastrotricha",
+      "speciedex_id": "spx:sha256:f2fcc591e2514fe53464a6202be82ab03e30269c231db3065199bbff007aad39",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Gastrotricha"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Acidobacteria",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "acidobacteria|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "25",
+        "url": "https://api.gbif.org/v1/species/25"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Acidobacteria",
+      "speciedex_id": "spx:sha256:bc3e9474716c7330528728dbfd2cffdd085840b5203e427850ae2807e7456022",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Acidobacteriota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Actinobacteria",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "actinobacteria|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "26",
+        "url": "https://api.gbif.org/v1/species/26"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Actinobacteria",
+      "speciedex_id": "spx:sha256:c5b4370a4b56a51b9844401f550c0b0a47135bb0c2ab4e0c90761105db520d9b",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Actinobacteriota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Deferribacteres",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "deferribacteres|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "28",
+        "url": "https://api.gbif.org/v1/species/28"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Deferribacteres",
+      "speciedex_id": "spx:sha256:9e5bc5710fc99dc5d1ff03734e357897416a2d748e550c846ce603e922d1fed9",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Deferribacterota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Fibrobacteres",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "fibrobacteres|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "29",
+        "url": "https://api.gbif.org/v1/species/29"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Fibrobacteres",
+      "speciedex_id": "spx:sha256:07cd38066c449542c52af99c54538bff547b8c6c565edde0b9fd44d73f0d01df",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Fibrobacterota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Gemmatimonadetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "gemmatimonadetes|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "30",
+        "url": "https://api.gbif.org/v1/species/30"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Gemmatimonadetes",
+      "speciedex_id": "spx:sha256:ebc4f8cc37468ffb018a0b15efebe12bdb338ed171237635e7ed3bd3637526ad",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Gemmatimonadota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Lentisphaerae",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "lentisphaerae|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "31",
+        "url": "https://api.gbif.org/v1/species/31"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Lentisphaerae",
+      "speciedex_id": "spx:sha256:929a76b8a7a1d3d077442c630199bf75aba65788c50371ef3c039bf64aeaf509",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Verrucomicrobiota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Oomycota",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "oomycota|phylum|chromista|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "32",
+        "url": "https://api.gbif.org/v1/species/32"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Oomycota",
+      "speciedex_id": "spx:sha256:d257465d5bdfe9fa156ee17a2d290d3ca146383016d531221644acca3e5e041d",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Chromista",
+        "order": "",
+        "phylum": "Oomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Mycetozoa",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "mycetozoa|phylum|protozoa|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "33",
+        "url": "https://api.gbif.org/v1/species/33"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Mycetozoa",
+      "speciedex_id": "spx:sha256:8a60559cf522ed782c7a4759a40791e3848085251f41f867c3eb2beb994a2b04",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Protozoa",
+        "order": "",
+        "phylum": "Mycetozoa"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Basidiomycota",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "basidiomycota|phylum|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "34",
+        "url": "https://api.gbif.org/v1/species/34"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Basidiomycota",
+      "speciedex_id": "spx:sha256:3665707805d9dac092bcef8b732e71602172997cd15dcd0b9170858a47992b1f",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Basidiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Bryophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "bryophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "35",
+        "url": "https://api.gbif.org/v1/species/35"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Bryophyta",
+      "speciedex_id": "spx:sha256:1463fd2e75d8c88775047d9fc62162a694ab1ac2113bd29777b1afaea4614d8f",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Bryophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Chlorophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "chlorophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "36",
+        "url": "https://api.gbif.org/v1/species/36"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Chlorophyta",
+      "speciedex_id": "spx:sha256:ec35259a03e3ea5a0f8fc0c6a6b4d1806982616c1a34c74517d0064fccf87ccb",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Chlorophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Glaucophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "glaucophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "37",
+        "url": "https://api.gbif.org/v1/species/37"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Glaucophyta",
+      "speciedex_id": "spx:sha256:896a51d82adfe84a0c9d685f0796b90fd8f83fdcaa4ab23349d0088ef7a35fac",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Glaucophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Cercozoa",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "cercozoa|phylum|chromista|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "38",
+        "url": "https://api.gbif.org/v1/species/38"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Cercozoa",
+      "speciedex_id": "spx:sha256:921499f989acc9281e89a7d48e08a68dd3c8592261a208f348123ca6d7c55a96",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Chromista",
+        "order": "",
+        "phylum": "Cercozoa"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Euglenozoa",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "euglenozoa|phylum|protozoa|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "41",
+        "url": "https://api.gbif.org/v1/species/41"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Euglenozoa",
+      "speciedex_id": "spx:sha256:289c3e29c0f2ca74f59ac8c6540226131a31ef492dab52879c7526dfa84d2493",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Protozoa",
+        "order": "",
+        "phylum": "Euglenozoa"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Annelida",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "annelida|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "42",
+        "url": "https://api.gbif.org/v1/species/42"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Annelida",
+      "speciedex_id": "spx:sha256:15038b1ea8df0533f6e8268df093813164a1e43e2726ff82f264813f8210702f",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Annelida"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Cnidaria",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "cnidaria|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "43",
+        "url": "https://api.gbif.org/v1/species/43"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Cnidaria",
+      "speciedex_id": "spx:sha256:349dbe6dd0b4e6f1ba3faef29d4f45a811cfd4be52f2d4f28f22d06b6e393ad3",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Cnidaria"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Chordata",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "chordata|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "44",
+        "url": "https://api.gbif.org/v1/species/44"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Chordata",
+      "speciedex_id": "spx:sha256:622239798fd2e1c092170ce8cf2bbfa064ea004da906e0e4bb6d34b2ff662c29",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Chordata"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Cycliophora",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "cycliophora|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "45",
+        "url": "https://api.gbif.org/v1/species/45"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Cycliophora",
+      "speciedex_id": "spx:sha256:92dc1dbe39959e8a87683e2295ecaf57b3b97f04c2d783d50d2e2299ca86cab0",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Cycliophora"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Thermodesulfobacteria",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "thermodesulfobacteria|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "46",
+        "url": "https://api.gbif.org/v1/species/46"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Thermodesulfobacteria",
+      "speciedex_id": "spx:sha256:2b7301ea5c7a91e52a91490ab72523033474d6bb18d29ea8af487f63b6ce80a4",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Desulfobacterota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Thermotogae",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "thermotogae|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "47",
+        "url": "https://api.gbif.org/v1/species/47"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Thermotogae",
+      "speciedex_id": "spx:sha256:dfd946857947e6794144b5f5967966fc5fcd2d6d7a99cc4438fe7407eb8ff134",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Thermotogota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Verrucomicrobia",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "verrucomicrobia|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "48",
+        "url": "https://api.gbif.org/v1/species/48"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Verrucomicrobia",
+      "speciedex_id": "spx:sha256:e66989f68bab20428a5b1f467235ca80d5ec953955f9361e8483e13088320510",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Verrucomicrobiota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Magnoliophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "magnoliophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "49",
+        "url": "https://api.gbif.org/v1/species/49"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Magnoliophyta",
+      "speciedex_id": "spx:sha256:3e426e4df2b158cf5e668a0ec9d8fd013172692d45c516ebc9808aca230ada25",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Tracheophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Echinodermata",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "echinodermata|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "50",
+        "url": "https://api.gbif.org/v1/species/50"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Echinodermata",
+      "speciedex_id": "spx:sha256:9e2ff49e1b98c80ccda0f15761de4751b5683ed6b86ea351a41298ebe60aca76",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Echinodermata"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Ctenophora",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "ctenophora|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "51",
+        "url": "https://api.gbif.org/v1/species/51"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Ctenophora",
+      "speciedex_id": "spx:sha256:bce51c76d65a26798531f454e550c9615fed0f55ad4945404f553e782387c5af",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Ctenophora"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Mollusca",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "mollusca|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "52",
+        "url": "https://api.gbif.org/v1/species/52"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Mollusca",
+      "speciedex_id": "spx:sha256:ec4b2ee051e2b02567fcff7b4af3f812f6ded9deb4faf2ed43e1b2a65f5f5564",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Mollusca"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Bryozoa",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "bryozoa|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "53",
+        "url": "https://api.gbif.org/v1/species/53"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Bryozoa",
+      "speciedex_id": "spx:sha256:02c60a13c6c10f433ec5f79a7a0f2c2101cafad23081c1cf26854e8bd21867d9",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Bryozoa"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Arthropoda",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "arthropoda|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "54",
+        "url": "https://api.gbif.org/v1/species/54"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Arthropoda",
+      "speciedex_id": "spx:sha256:447bc60a84f9e120a3b646a063a504ceebdf3f1625f432538eb86407daf79cda",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Arthropoda"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Chaetognatha",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "chaetognatha|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "55",
+        "url": "https://api.gbif.org/v1/species/55"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Chaetognatha",
+      "speciedex_id": "spx:sha256:189c2e32da25fe4aeeb31deb148526124b514c6beacf14a2192ec876126046a6",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Chaetognatha"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Sarcomastigophora",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "sarcomastigophora|phylum|protozoa|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "56",
+        "url": "https://api.gbif.org/v1/species/56"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Sarcomastigophora",
+      "speciedex_id": "spx:sha256:30059852cb08b46dcee2afb6bd51b6dfb0741625da5793c7721992351232e0aa",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Protozoa",
+        "order": "",
+        "phylum": "Sarcomastigophora"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Pteridophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "pteridophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "59",
+        "url": "https://api.gbif.org/v1/species/59"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Pteridophyta",
+      "speciedex_id": "spx:sha256:9402137d77243c2fda7ccba9d009f77f9703c192ad74d3ad07b84b04b7e44959",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Tracheophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Psilophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "psilophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "60",
+        "url": "https://api.gbif.org/v1/species/60"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Psilophyta",
+      "speciedex_id": "spx:sha256:7e3e067e757c92327bae769ac900e7068ec0676341319f50bf0b939b07c39cf1",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Tracheophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Equisetophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "equisetophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "61",
+        "url": "https://api.gbif.org/v1/species/61"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Equisetophyta",
+      "speciedex_id": "spx:sha256:c748f1edfda1ee8c7f6e9e4395b0e927f194bfdb051c3fb70e552d9ec87ed2db",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Tracheophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Onychophora",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "onychophora|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "62",
+        "url": "https://api.gbif.org/v1/species/62"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Onychophora",
+      "speciedex_id": "spx:sha256:4fa8b3951ca854f537a87be53f283f8727644791fdb43d5c1f15cc3899df94e3",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Onychophora"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Nemertea",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "nemertea|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "63",
+        "url": "https://api.gbif.org/v1/species/63"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Nemertea",
+      "speciedex_id": "spx:sha256:95b235d83ab4eb67504b29581d70052636525bfe6fcd73cd2e1c03fe6f50404a",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Nemertea"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Nematomorpha",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "nematomorpha|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "64",
+        "url": "https://api.gbif.org/v1/species/64"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Nematomorpha",
+      "speciedex_id": "spx:sha256:8ee832571bcedc692889cf571b88e30b5b69751a10ba86baf0b325102ba71e6d",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Nematomorpha"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Acanthocephala",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "acanthocephala|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "67",
+        "url": "https://api.gbif.org/v1/species/67"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Acanthocephala",
+      "speciedex_id": "spx:sha256:f78018b8b15397fc7be6cc64a1579cf41e2307df5a51c64f77db6ae445cf2985",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Acanthocephala"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Cyanobacteria",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "cyanobacteria|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "68",
+        "url": "https://api.gbif.org/v1/species/68"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Cyanobacteria",
+      "speciedex_id": "spx:sha256:d7a8ef2342baf1de92c90183f892065d86db4064f20b3715a769ad65e52d078b",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Cyanobacteria"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Cryptophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "cryptophyta|phylum|chromista|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "69",
+        "url": "https://api.gbif.org/v1/species/69"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Cryptophyta",
+      "speciedex_id": "spx:sha256:1c6911c99ee855ea127aef9dbc82d06b67ce4a7de0d8cb565335bff8b8a57302",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Chromista",
+        "order": "",
+        "phylum": "Cryptophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Haptophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "haptophyta|phylum|chromista|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "70",
+        "url": "https://api.gbif.org/v1/species/70"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Haptophyta",
+      "speciedex_id": "spx:sha256:c5e2d858134d86327ead1c639408a2853309173e1f0ad2697f04d8676c7d6320",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Chromista",
+        "order": "",
+        "phylum": "Haptophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Blastocladiomycota",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "blastocladiomycota|phylum|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "73",
+        "url": "https://api.gbif.org/v1/species/73"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Blastocladiomycota",
+      "speciedex_id": "spx:sha256:b49b9a0932f175c7b5598da5e0daac7fa95fb3f6276a8c114f7626b0b662f3cc",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Blastocladiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Sipuncula",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "sipuncula|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "74",
+        "url": "https://api.gbif.org/v1/species/74"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Sipuncula",
+      "speciedex_id": "spx:sha256:06ad5b309631052d2e34aa954e70dbcb8f462851787000ff3f068d0331b763cc",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Sipuncula"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Hemichordata",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "hemichordata|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "75",
+        "url": "https://api.gbif.org/v1/species/75"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Hemichordata",
+      "speciedex_id": "spx:sha256:bcafba787155004aa5ee8ab895a266b1304a8adc0fa812c5464cdc7d9bcd079b",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Hemichordata"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Placozoa",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "placozoa|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "76",
+        "url": "https://api.gbif.org/v1/species/76"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Placozoa",
+      "speciedex_id": "spx:sha256:816a23d7d673616711033d19b87f3e5f6516cec3ba69d2fd472c745e375975c1",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Placozoa"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Gnathostomulida",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "gnathostomulida|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "77",
+        "url": "https://api.gbif.org/v1/species/77"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Gnathostomulida",
+      "speciedex_id": "spx:sha256:5e62e6999faed32e4b9a493e619e4f4ca128340433a40369c98e06db8d629cf7",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Gnathostomulida"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Gnetophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "gnetophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "78",
+        "url": "https://api.gbif.org/v1/species/78"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Gnetophyta",
+      "speciedex_id": "spx:sha256:39e8fcbc4ace21f9662dbbe0d6482cd7d3ea3079643d4696676f546a703b14a2",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Tracheophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Crenarchaeota",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "crenarchaeota|phylum|archaea|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "79",
+        "url": "https://api.gbif.org/v1/species/79"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Crenarchaeota",
+      "speciedex_id": "spx:sha256:7ee62f2746cf8864a2001e7c802bbc4a0c632b2e158f4ceef88c175974a4603e",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Archaea",
+        "order": "",
+        "phylum": "Thermoproteota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Aquificae",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "aquificae|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "80",
+        "url": "https://api.gbif.org/v1/species/80"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Aquificae",
+      "speciedex_id": "spx:sha256:7e5847fb4e986222ab598cdbf5f75590c10b58f801fc9a449df6616e660b7c31",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Aquificota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Bacteroidetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "bacteroidetes|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "81",
+        "url": "https://api.gbif.org/v1/species/81"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Bacteroidetes",
+      "speciedex_id": "spx:sha256:03a83645f4b6a0cf5f16925571453d25e7cacc6758313323f7bc5f4326003469",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Bacteroidota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Chlamydiae",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "chlamydiae|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "82",
+        "url": "https://api.gbif.org/v1/species/82"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Chlamydiae",
+      "speciedex_id": "spx:sha256:b79d9dde620ebe6bb623a07e487c8baaba229b54325d2fdb810acf17258b8344",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Chlamydiota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Chlorobi",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "chlorobi|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "83",
+        "url": "https://api.gbif.org/v1/species/83"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Chlorobi",
+      "speciedex_id": "spx:sha256:1119cc273082f2a129972248acc4f17863d7c9b2b2ce66e8bfab8c9c6cf84486",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Bacteroidota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Chloroflexi",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "chloroflexi|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "84",
+        "url": "https://api.gbif.org/v1/species/84"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Chloroflexi",
+      "speciedex_id": "spx:sha256:c58f5909be08a90f862510ce2332d4881cd9eb9c3c0be7a4992d21960ed9aa65",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Chloroflexota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Dictyoglomi",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "dictyoglomi|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "85",
+        "url": "https://api.gbif.org/v1/species/85"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Dictyoglomi",
+      "speciedex_id": "spx:sha256:e3c6bca742c87502fceebfd10db939d05ad64ad04ddae0e2a0d21015e6fc9939",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Dictyoglomota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Firmicutes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "firmicutes|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "87",
+        "url": "https://api.gbif.org/v1/species/87"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Firmicutes",
+      "speciedex_id": "spx:sha256:3551b213f00b8da2dabed6d1293bed1e72b27229f3b8fc7df849860a12d03897",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Firmicutes"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Fusobacteria",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "fusobacteria|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "88",
+        "url": "https://api.gbif.org/v1/species/88"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Fusobacteria",
+      "speciedex_id": "spx:sha256:97339d28e72a0b14e6d2f1e026de95ae186126801ec1e840f9785bcd5b928cae",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Fusobacteriota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Planctomycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "planctomycetes|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "90",
+        "url": "https://api.gbif.org/v1/species/90"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Planctomycetes",
+      "speciedex_id": "spx:sha256:4ba5a2489efaab3e48fbd59d9ac4c4cf4558f2b212e4b2ab553b8292b07ca0c2",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Planctomycetota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Rotifera",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "rotifera|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "91",
+        "url": "https://api.gbif.org/v1/species/91"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Rotifera",
+      "speciedex_id": "spx:sha256:2cf7adda643b5326ed59b4a6b43cec088bd8e4e76b75e25d37da1cea94f557ae",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Rotifera"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Chytridiomycota",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "chytridiomycota|phylum|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "94",
+        "url": "https://api.gbif.org/v1/species/94"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Chytridiomycota",
+      "speciedex_id": "spx:sha256:fe8fddd60d2aa24e2b13d949c27e048585cfb244e63b3bd0a1d73f7f6a56f9e7",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Chytridiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Ascomycota",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "ascomycota|phylum|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "95",
+        "url": "https://api.gbif.org/v1/species/95"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Ascomycota",
+      "speciedex_id": "spx:sha256:d316ac6524d3b5ff10fd89448e150be729ef08ca7076a223f51e80ce363cc8a6",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Ascomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Zygomycota",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "zygomycota|phylum|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "96",
+        "url": "https://api.gbif.org/v1/species/96"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Zygomycota",
+      "speciedex_id": "spx:sha256:ac3d773139afc4b9cb5531f2fb48a8e21b9ea1cf4e0ea73a360f7c7a3e6e6766",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Zygomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Choanozoa",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "choanozoa|phylum|protozoa|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "97",
+        "url": "https://api.gbif.org/v1/species/97"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Choanozoa",
+      "speciedex_id": "spx:sha256:626f4d5176017615ce8a4432b106ef15e1d5231932f0718306ac9f0262199806",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Protozoa",
+        "order": "",
+        "phylum": "Choanozoa"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Ochrophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "ochrophyta|phylum|chromista|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "98",
+        "url": "https://api.gbif.org/v1/species/98"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Ochrophyta",
+      "speciedex_id": "spx:sha256:16d449d1b2be761c0278f1cb8745e30bff1f0d3431b4667c9f8675a77a450689",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Chromista",
+        "order": "",
+        "phylum": "Ochrophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Cycadophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "cycadophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "103",
+        "url": "https://api.gbif.org/v1/species/103"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Cycadophyta",
+      "speciedex_id": "spx:sha256:8b989db8518bf363f4610b8ac613540c56787f3869db0f7d4aaa234d9caf7a2e",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Tracheophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Prasinophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "prasinophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "104",
+        "url": "https://api.gbif.org/v1/species/104"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Prasinophyta",
+      "speciedex_id": "spx:sha256:dfa0bcd588994744c5804bca98ed80dba98fa2cb180fe826048d2267954d51d0",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "Prasinophyceae",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Chlorophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Porifera",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "porifera|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "105",
+        "url": "https://api.gbif.org/v1/species/105"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Porifera",
+      "speciedex_id": "spx:sha256:03e6e185a1e8f720f67f2a8d86f33c9e23ea6b143ec781193af649bd03f89f70",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Porifera"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Rhodophyta",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "rhodophyta|phylum|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "106",
+        "url": "https://api.gbif.org/v1/species/106"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Rhodophyta",
+      "speciedex_id": "spx:sha256:06f9d16bf779aadead8aafadd8ea36c14cab2f6867245f15b8a7bc97acb8f0e6",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Rhodophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Platyhelminthes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "platyhelminthes|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "108",
+        "url": "https://api.gbif.org/v1/species/108"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Platyhelminthes",
+      "speciedex_id": "spx:sha256:9bc44c43500725e46479282fc29fbc2274351249f9fe8280f05dfed7b8510b69",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Platyhelminthes"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Brachiopoda",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "brachiopoda|phylum|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "110",
+        "url": "https://api.gbif.org/v1/species/110"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Brachiopoda",
+      "speciedex_id": "spx:sha256:bdc098d36d7c28c33b70dfb78d592e72872460990dd5db09563df2db3c1bb9fe",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Brachiopoda"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Proteobacteria",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "proteobacteria|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "111",
+        "url": "https://api.gbif.org/v1/species/111"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Proteobacteria",
+      "speciedex_id": "spx:sha256:9cc3814795f25c918839a792c0ef793cb3824e2479676d061a23c94a022f77fb",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Proteobacteria"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Spirochaetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "spirochaetes|phylum|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "112",
+        "url": "https://api.gbif.org/v1/species/112"
+      },
+      "rank": "phylum",
+      "schema_version": 1,
+      "scientific_name": "Spirochaetes",
+      "speciedex_id": "spx:sha256:6353a489f6e045bd0ff56470c191502e302322ab1cc2045a63c6411b66df9918",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Spirochaetota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Lobosa",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "lobosa|class|protozoa|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "116",
+        "url": "https://api.gbif.org/v1/species/116"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Lobosa",
+      "speciedex_id": "spx:sha256:bda8351b2fbc0f281860f454e9360558c7ed27400c1dd0561868f53c35cd3772",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Lobosa",
+        "family": "",
+        "genus": "",
+        "kingdom": "Protozoa",
+        "order": "",
+        "phylum": "Amoebozoa"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Zoomastigophora",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "zoomastigophora|class|protozoa|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "118",
+        "url": "https://api.gbif.org/v1/species/118"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Zoomastigophora",
+      "speciedex_id": "spx:sha256:7559702185b7ebf855570436d47270a0f03a15719fef88cbc82c5e242eb73304",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Zoomastigophora",
+        "family": "",
+        "genus": "",
+        "kingdom": "Protozoa",
+        "order": "",
+        "phylum": "Sarcomastigophora"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Myxini",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "myxini|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "119",
+        "url": "https://api.gbif.org/v1/species/119"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Myxini",
+      "speciedex_id": "spx:sha256:e5e5183fbb762c95958670ae60ce1dcd791cb7f09a1f98532cbe9c302d43f9c9",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Myxini",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Chordata"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Holocephali",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "holocephali|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "120",
+        "url": "https://api.gbif.org/v1/species/120"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Holocephali",
+      "speciedex_id": "spx:sha256:5c7d55c3311687d47703e609d1a595e7df6c5b2e5b082a0f2bc543aedf2d504b",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Holocephali",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Chordata"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Elasmobranchii",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "elasmobranchii|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "121",
+        "url": "https://api.gbif.org/v1/species/121"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Elasmobranchii",
+      "speciedex_id": "spx:sha256:2d13453751299e811a904bc260fe4b19f351a703c7df6d84b75315bc9afbf1da",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Elasmobranchii",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Chordata"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Marchantiopsida",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "marchantiopsida|class|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "125",
+        "url": "https://api.gbif.org/v1/species/125"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Marchantiopsida",
+      "speciedex_id": "spx:sha256:0b62dd2ce8f68a159c8e71f99caa47b0c393d48c08c5435b664dcbb13d3f8d0c",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Marchantiopsida",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Marchantiophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Jungermanniopsida",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "jungermanniopsida|class|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "126",
+        "url": "https://api.gbif.org/v1/species/126"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Jungermanniopsida",
+      "speciedex_id": "spx:sha256:df99db1a23416b6375d4f9e10b5122fe5447794eeccdbf7f4e46045aaa78718a",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Jungermanniopsida",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Marchantiophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Haplomitriopsida",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "haplomitriopsida|class|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "127",
+        "url": "https://api.gbif.org/v1/species/127"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Haplomitriopsida",
+      "speciedex_id": "spx:sha256:5908f536b61e530a7aa11964ce6281b581edf9b82af6575e384affff3a34e8c1",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Haplomitriopsida",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Marchantiophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Amphibia",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "amphibia|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "131",
+        "url": "https://api.gbif.org/v1/species/131"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Amphibia",
+      "speciedex_id": "spx:sha256:f90b2ac65962395116902c334e2bba519894e7fac9e96acc936db98a8ca18419",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Amphibia",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Chordata"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Anthocerotopsida",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "anthocerotopsida|class|plantae|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "132",
+        "url": "https://api.gbif.org/v1/species/132"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Anthocerotopsida",
+      "speciedex_id": "spx:sha256:3a5b5e217629bf7a8fc20721295b24100a4ddd4888936943091d8cac45c8eed4",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Anthocerotopsida",
+        "family": "",
+        "genus": "",
+        "kingdom": "Plantae",
+        "order": "",
+        "phylum": "Anthocerotophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Mesotardigrada",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "mesotardigrada|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "133",
+        "url": "https://api.gbif.org/v1/species/133"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Mesotardigrada",
+      "speciedex_id": "spx:sha256:4c2434e89d4b8a6afaecf0265075d2bee37b14e2001e3a34153910c5d64c79c9",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Mesotardigrada",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Tardigrada"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Eutardigrada",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "eutardigrada|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "134",
+        "url": "https://api.gbif.org/v1/species/134"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Eutardigrada",
+      "speciedex_id": "spx:sha256:fbf3763fcd0634c219dc27c9e87046209ed3ec81c564d25b57f24bb7c11a995d",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Eutardigrada",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Tardigrada"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Cephalopoda",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "cephalopoda|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "136",
+        "url": "https://api.gbif.org/v1/species/136"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Cephalopoda",
+      "speciedex_id": "spx:sha256:7c2d3938f4714c3e3a960f43a67f5092ccdb937225e19a696388ed9668584238",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Cephalopoda",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Mollusca"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Bivalvia",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "bivalvia|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "137",
+        "url": "https://api.gbif.org/v1/species/137"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Bivalvia",
+      "speciedex_id": "spx:sha256:5ef6d8107e328fa167a68f84e9b66884a65a0d342afdbef99851f34133fce050",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Bivalvia",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Mollusca"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Phylactolaemata",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "phylactolaemata|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "139",
+        "url": "https://api.gbif.org/v1/species/139"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Phylactolaemata",
+      "speciedex_id": "spx:sha256:e902bc0fa80097b89bdd78b2da50171aa4b7860e8dc90fcd431e1aae54432d67",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Phylactolaemata",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Bryozoa"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Eoacanthocephala",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "eoacanthocephala|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "140",
+        "url": "https://api.gbif.org/v1/species/140"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Eoacanthocephala",
+      "speciedex_id": "spx:sha256:a4c7c92b16c8d22460fac7f78bc70ea3f242fbfa86581c45a8c9a9fd9c523ff1",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Eoacanthocephala",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Acanthocephala"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Bolidophyceae",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "bolidophyceae|class|chromista|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "142",
+        "url": "https://api.gbif.org/v1/species/142"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Bolidophyceae",
+      "speciedex_id": "spx:sha256:f0a8cf9b5b6bd70afb84ddd43ce20c511ada1697b77440e2c909a17e5146e959",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Bolidophyceae",
+        "family": "",
+        "genus": "",
+        "kingdom": "Chromista",
+        "order": "",
+        "phylum": "Ochrophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Pauropoda",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "pauropoda|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "143",
+        "url": "https://api.gbif.org/v1/species/143"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Pauropoda",
+      "speciedex_id": "spx:sha256:d5b77fc2adc1c3877f79a1305c9602f5f2c88f87b916e6eb39ce6ac26501634d",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Pauropoda",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Arthropoda"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Cestoda",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "cestoda|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "144",
+        "url": "https://api.gbif.org/v1/species/144"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Cestoda",
+      "speciedex_id": "spx:sha256:03b0ad7e84771b0f9da9a31544e49d943ee89485e1c92d59875372518436411e",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Cestoda",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Platyhelminthes"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Protosteliomycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "protosteliomycetes|class|protozoa|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "145",
+        "url": "https://api.gbif.org/v1/species/145"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Protosteliomycetes",
+      "speciedex_id": "spx:sha256:6dc150e240cacb67ea8945b7ae1304bc845b9019cac7dbcab14c085b7ad16c83",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Protosteliomycetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Protozoa",
+        "order": "",
+        "phylum": "Mycetozoa"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Hexactinellida",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "hexactinellida|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "146",
+        "url": "https://api.gbif.org/v1/species/146"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Hexactinellida",
+      "speciedex_id": "spx:sha256:5b3fd1a5da160823853eed288f786f795f5c2d2b3f26e9788e0c62a54941b31c",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Hexactinellida",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Porifera"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Blastocladiomycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "blastocladiomycetes|class|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "147",
+        "url": "https://api.gbif.org/v1/species/147"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Blastocladiomycetes",
+      "speciedex_id": "spx:sha256:2d640e592e3e767b40a592610c106a9d3606f81083eae76d6e650341da1a7183",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Blastocladiomycetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Blastocladiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Ustilaginomycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "ustilaginomycetes|class|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "148",
+        "url": "https://api.gbif.org/v1/species/148"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Ustilaginomycetes",
+      "speciedex_id": "spx:sha256:9f5f45842846c416bf85af58544fe9509bf1f354bfcf21a3e3a2f0f4df4ccf3d",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Ustilaginomycetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Basidiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Tremellomycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "tremellomycetes|class|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "149",
+        "url": "https://api.gbif.org/v1/species/149"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Tremellomycetes",
+      "speciedex_id": "spx:sha256:92347a689e7ac23d20af1c10d93f75c9eea837c5c11266c8085627675d828d86",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Tremellomycetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Basidiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Microbotryomycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "microbotryomycetes|class|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "150",
+        "url": "https://api.gbif.org/v1/species/150"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Microbotryomycetes",
+      "speciedex_id": "spx:sha256:11ad39f4a1a7a60dae1152e09e79d1e9dd0a31430cd29edbf0080fc28acb2612",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Microbotryomycetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Basidiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Exobasidiomycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "exobasidiomycetes|class|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "151",
+        "url": "https://api.gbif.org/v1/species/151"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Exobasidiomycetes",
+      "speciedex_id": "spx:sha256:5bae86bbc4f611f4d5e0fecb0df2e6684917681b535b7ff719fccccafb6bb6ea",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Exobasidiomycetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Basidiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Cystobasidiomycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "cystobasidiomycetes|class|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "152",
+        "url": "https://api.gbif.org/v1/species/152"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Cystobasidiomycetes",
+      "speciedex_id": "spx:sha256:d051343f3e7de2dc3bad264821b4f0ffdbfa5f3c5a4cc5b094b5189ff9467730",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Cystobasidiomycetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Basidiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Cryptomycocolacomycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "cryptomycocolacomycetes|class|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "153",
+        "url": "https://api.gbif.org/v1/species/153"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Cryptomycocolacomycetes",
+      "speciedex_id": "spx:sha256:fd45d51da44a0da8a7695a626f2dca044dfa0ced3f86e92623109e5e4cb53fa8",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Cryptomycocolacomycetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Basidiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Classiculomycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "classiculomycetes|class|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "154",
+        "url": "https://api.gbif.org/v1/species/154"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Classiculomycetes",
+      "speciedex_id": "spx:sha256:638c2100f662fe3da637f79393f48a60c37f3239d03568348e171bd5f20e683c",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Classiculomycetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Basidiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Atractiellomycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "atractiellomycetes|class|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "155",
+        "url": "https://api.gbif.org/v1/species/155"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Atractiellomycetes",
+      "speciedex_id": "spx:sha256:a69959b8d9392efc29124cac2d53fb0be1fd7cf15209483b3324c8d8d15d9192",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Atractiellomycetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Basidiomycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Glomeromycetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "glomeromycetes|class|fungi|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "156",
+        "url": "https://api.gbif.org/v1/species/156"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Glomeromycetes",
+      "speciedex_id": "spx:sha256:71f52bda6f5de235cd29922b83c7590dd505ec0c133222eb39b9c0d86c09cc21",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Glomeromycetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Fungi",
+        "order": "",
+        "phylum": "Glomeromycota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Dictyochophyceae",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "dictyochophyceae|class|chromista|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "157",
+        "url": "https://api.gbif.org/v1/species/157"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Dictyochophyceae",
+      "speciedex_id": "spx:sha256:ac40a475eb2aa6136f10697ed36a6874786e64638eaa2db007af290873fadf2e",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Dictyochophyceae",
+        "family": "",
+        "genus": "",
+        "kingdom": "Chromista",
+        "order": "",
+        "phylum": "Ochrophyta"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Phascolosomatidea",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "phascolosomatidea|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "158",
+        "url": "https://api.gbif.org/v1/species/158"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Phascolosomatidea",
+      "speciedex_id": "spx:sha256:9b05c66075710c390085bec2fa546a388225a8465bf561ffccf61631864c6acf",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Phascolosomatidea",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Sipuncula"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Sipunculidea",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "sipunculidea|class|animalia|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "159",
+        "url": "https://api.gbif.org/v1/species/159"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Sipunculidea",
+      "speciedex_id": "spx:sha256:4a791e103e9a69a9892e578fcaf597c30957aa49c9a7a39a77f1249a535d2e64",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Sipunculidea",
+        "family": "",
+        "genus": "",
+        "kingdom": "Animalia",
+        "order": "",
+        "phylum": "Sipuncula"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Halobacteria",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "halobacteria|class|archaea|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "160",
+        "url": "https://api.gbif.org/v1/species/160"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Halobacteria",
+      "speciedex_id": "spx:sha256:627e2ae06e7ee99657a140a18fd5df2e7d328491d3bfb04096e745230746f82b",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Halobacteria",
+        "family": "",
+        "genus": "",
+        "kingdom": "Archaea",
+        "order": "",
+        "phylum": "Halobacteriota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Methanococci",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "methanococci|class|archaea|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "161",
+        "url": "https://api.gbif.org/v1/species/161"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Methanococci",
+      "speciedex_id": "spx:sha256:2254112820c9a20d43f79760e49d11bb770ff276b8585085d7ca951482a5f9d4",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Methanococci",
+        "family": "",
+        "genus": "",
+        "kingdom": "Archaea",
+        "order": "",
+        "phylum": "Methanobacteriota_A"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Methanomicrobia",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "methanomicrobia|class|archaea|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "162",
+        "url": "https://api.gbif.org/v1/species/162"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Methanomicrobia",
+      "speciedex_id": "spx:sha256:b437e3c225a6305849eeb15d9ef7cb549312f57f496e1223e6098902aefc92d4",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Methanomicrobia",
+        "family": "",
+        "genus": "",
+        "kingdom": "Archaea",
+        "order": "",
+        "phylum": "Halobacteriota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Methanopyri",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "methanopyri|class|archaea|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "163",
+        "url": "https://api.gbif.org/v1/species/163"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Methanopyri",
+      "speciedex_id": "spx:sha256:660fa45c293342e12f1a241b987c8ae675731a53aabc1ae3c0bce6c6d546c80f",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Methanopyri",
+        "family": "",
+        "genus": "",
+        "kingdom": "Archaea",
+        "order": "",
+        "phylum": "Methanobacteriota_A"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Actinobacteria",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "actinobacteria|class|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "165",
+        "url": "https://api.gbif.org/v1/species/165"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Actinobacteria",
+      "speciedex_id": "spx:sha256:6d81073900ef07e3fa2edb61d3b25e196005822e60b71251d3c5993f8384aed7",
+      "status": "synonym",
+      "taxonomy": {
+        "class": "Actinomycetia",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Actinobacteriota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Chlorobia",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "chlorobia|class|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "168",
+        "url": "https://api.gbif.org/v1/species/168"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Chlorobia",
+      "speciedex_id": "spx:sha256:5568ccc311caf89ef2058dd7fdfc43db09563282b2a0b7de3a4ce91b5f825687",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Chlorobia",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Bacteroidota"
+      }
+    },
+    {
+      "authorship": "",
+      "canonical_name": "Chrysiogenetes",
+      "first_seen": "2026-07-19T00:07:05Z",
+      "identity_key": "chrysiogenetes|class|bacteria|",
+      "initial_source": {
+        "provider": "gbif",
+        "provider_id": "169",
+        "url": "https://api.gbif.org/v1/species/169"
+      },
+      "rank": "class",
+      "schema_version": 1,
+      "scientific_name": "Chrysiogenetes",
+      "speciedex_id": "spx:sha256:dc1ade5c79a0044d411811634b56729a23d4f1a5cf4388fea15a5434a59e487d",
+      "status": "accepted",
+      "taxonomy": {
+        "class": "Chrysiogenetes",
+        "family": "",
+        "genus": "",
+        "kingdom": "Bacteria",
+        "order": "",
+        "phylum": "Chrysiogenota"
+      }
+    }
+  ]
+}
