@@ -454,3 +454,18 @@ Licensed under the MIT License.
     border-color: rgba(255,123,114,.48);
     color: var(--terminal-error);
 }
+
+/* Match the terminal partial's real header elements at every viewport. */
+.terminal-title-group { display:flex; flex-direction:column; gap:.15rem; min-width:0; }
+.terminal-session-label { font-size:.68rem; color:var(--terminal-muted); overflow:hidden; text-overflow:ellipsis; }
+.terminal-status-group { display:flex; align-items:center; gap:.4rem; min-width:0; }
+.terminal-actions { display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; margin-left:auto; }
+.terminal-action { min-width:2rem; min-height:2rem; }
+.terminal-header { display:flex; flex-wrap:wrap; gap:.65rem; align-items:center; }
+@media(max-width:600px) {
+ .terminal-header { gap:.4rem; }
+ .terminal-title-group { flex:1 1 auto; }
+ .terminal-status-group { font-size:.7rem; }
+ .terminal-actions { flex:1 1 100%; justify-content:flex-end; }
+ .terminal-session-label { font-size:.6rem; }
+}
