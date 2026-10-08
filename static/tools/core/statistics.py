@@ -472,6 +472,35 @@ class StatisticsManager:
             )
         )
 
+        provider_universe = {
+            normalize_key(
+                item.get(
+                    "provider",
+                    "",
+                )
+            )
+            for item in (
+                *normalized_summaries,
+                *normalized_skipped,
+            )
+            if normalize_key(
+                item.get(
+                    "provider",
+                    "",
+                )
+            )
+        }
+
+        if provider_universe:
+            # Public "Providers" means the complete registered provider
+            # universe represented by this run, not only providers that were
+            # executable/attempted on this worker.
+            summary["providers"] = (
+                len(
+                    provider_universe
+                )
+            )
+
         sources = {
             "generated_at": generated_at,
             "providers": normalized_summaries,
