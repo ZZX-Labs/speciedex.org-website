@@ -11,7 +11,7 @@ FIELDS_COMMON_LIST=("common_names","commonNames","vernacular_names","vernacularN
 TAX_RANKS=("domain","superkingdom","kingdom","subkingdom","phylum","subphylum","class","subclass","order","suborder","family","subfamily","tribe","subtribe","genus","subgenus","species","subspecies")
 
 GROUPS={
-"plant":"Plant","fungi":"Fungi","bird":"Bird","fish":"Fish","mammal":"Mammal","reptile":"Reptile","amphibian":"Amphibian","crustacean":"Crustacean","insect":"Insect","arachnid":"Arachnid","mollusk":"Mollusk","worm":"Worm","echinoderm":"Echinoderm","cnidarian":"Cnidarian","sponge":"Sponge","algae":"Algae","protist":"Protist","bacteria":"Bacteria","archaea":"Archaea","virus":"Virus","pollen":"Pollen","coral":"Coral","plankton":"Plankton","other":"Other"}
+"plant":"Plant","fungi":"Fungi","bird":"Bird","fish":"Fish","mammal":"Mammal","reptile":"Reptile","amphibian":"Amphibian","crustacean":"Crustacean","insect":"Insect","arachnid":"Arachnid","mollusk":"Mollusk","worm":"Worm","echinoderm":"Echinoderm","cnidarian":"Cnidarian","sponge":"Sponge","algae":"Algae","protist":"Protist","bacteria":"Bacteria","archaea":"Archaea","virus":"Virus","pollen":"Pollen","coral":"Coral","plankton":"Plankton","fossil":"Fossil / Extinct","other":"Other"}
 
 def clean(v:Any)->str: return str(v or '').strip()
 def norm(v:Any)->str: return ' '.join(clean(v).casefold().split())
@@ -91,6 +91,19 @@ def group_hints(record:Mapping[str,Any])->list[str]:
 def broad_group(record:Mapping[str,Any], taxonomy:Mapping[str,str])->str:
     blob=' '.join(norm(x) for x in [*taxonomy.values(), record.get('rank'), record.get('scientific_name'), record.get('canonical_name'), record.get('material'), record.get('record_type'), *(record.get('group_hints') or []), *group_hints(record)])
     kingdom=norm(taxonomy.get('kingdom')); domain=norm(taxonomy.get('domain')); cls=norm(taxonomy.get('class')); phylum=norm(taxonomy.get('phylum')); order=norm(taxonomy.get('order'))
+    # Extinct/fossil material is a display state that should win over the
+    # broad living clade icon.  This lets paleobiology records surface as a
+    # fossil at a glance while their full taxonomy remains available.
+    status_blob = ' '.join(norm(x) for x in [
+        record.get('status'), record.get('taxonomic_status'),
+        record.get('conservation_status'), record.get('material'),
+        record.get('record_type'), *(record.get('group_hints') or [])
+    ])
+    if any(token in status_blob or token in blob for token in (
+        'extinct', 'fossil', 'paleobiology', 'palaeobiology', 'paleontolog',
+        'palaeontolog'
+    )):
+        return 'fossil'
     if 'pollen' in blob: return 'pollen'
     if 'virus' in blob or any(x in blob for x in ('viruses','viridae','riboviria','duplodnaviria','monodnaviria','varidnaviria','adnaviria')): return 'virus'
     if domain=='bacteria' or kingdom in {'bacteria','eubacteria'}: return 'bacteria'
