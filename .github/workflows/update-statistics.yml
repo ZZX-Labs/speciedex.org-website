@@ -112,6 +112,9 @@ jobs:
       ORCHESTRATED: ${{ inputs.orchestrated || false }}
       TAXONOMY_ROOT: static/data/taxonomy
       STATISTICS_ROOT: static/data
+      PROVIDER_DATA_REPOSITORY: ${{ vars.SPECIEDEX_PROVIDER_DATA_REPOSITORY }}
+      PROVIDER_DATA_TOKEN: ${{ secrets.SPECIEDEX_PROVIDER_DATA_TOKEN }}
+      PROVIDER_DATA_CHECKOUT: .runtime/provider-data
 
     steps:
       - name: Normalize and validate request metadata
@@ -178,6 +181,16 @@ jobs:
           ref: ${{ steps.request.outputs.target_ref }}
           fetch-depth: 0
           persist-credentials: true
+
+      - name: Check out private provider data
+        if: env.PROVIDER_DATA_REPOSITORY != '' && env.PROVIDER_DATA_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PROVIDER_DATA_REPOSITORY }}
+          token: ${{ env.PROVIDER_DATA_TOKEN }}
+          path: ${{ env.PROVIDER_DATA_CHECKOUT }}
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -272,12 +285,64 @@ jobs:
               print('No remote feeds configured; use installed local exports.')
           PY
 
+      - name: Mount private provider datasets
+        id: provider_data
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p .git/info .runtime
+          {
+            printf '%s\n' '/static/data/import/'
+            printf '%s\n' '/.runtime/'
+          } >> .git/info/exclude
+
+          report="$RUNNER_TEMP/speciedex-provider-data-mount.json"
+          source_root=""
+
+          if test -d "$PROVIDER_DATA_CHECKOUT"
+          then
+            source_root="$PROVIDER_DATA_CHECKOUT"
+          fi
+
+          python static/tools/provider-data-mount.py \
+            --repo-root . \
+            --source-root "$source_root" \
+            --report "$report"
+
+          cat "$report"
+
+          PROVIDER_DATA_REPORT="$report" python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          payload = json.loads(
+              Path(os.environ['PROVIDER_DATA_REPORT']).read_text(encoding='utf-8')
+          )
+
+          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
+              for key in (
+                  'requirements',
+                  'mounted',
+                  'local_present',
+                  'available_after_mount',
+                  'missing',
+              ):
+                  output.write(f"{key}={int(payload.get(key, 0))}\n")
+
+              output.write(
+                  'private_repo_available='
+                  + ('true' if payload.get('source_repository_available') else 'false')
+                  + '\n'
+              )
+          PY
+
       - name: Validate Python source
         run: |
           set -Eeuo pipefail
 
           python -m py_compile \
-            static/tools/stat-grabber.py
+            static/tools/stat-grabber.py \
+            static/tools/provider-data-mount.py
 
           python -m compileall -q \
             static/tools/core \
@@ -1205,7 +1270,8 @@ jobs:
               --porcelain \
               --untracked-files=all \
               -- \
-              static/data
+              static/data \
+              ':(exclude)static/data/import/**'
           )"
           then
             printf '%s\n' \
@@ -1238,8 +1304,20 @@ jobs:
             user.email \
             "speciedex-taxonomy-bot@users.noreply.github.com"
 
-          git add -- static/data
+          git add -- static/data ':(exclude)static/data/import/**'
           if test "${{ inputs.orchestrated }}" != "true"; then git add -- api/speciedex/v1; fi
+
+          staged_private_data="$(
+            git diff --cached --name-only -- static/data/import
+          )"
+
+          if test -n "$staged_private_data"
+          then
+            printf '%s\n' \
+              "ERROR: Refusing to publish transient private provider datasets:" \
+              "$staged_private_data"
+            exit 1
+          fi
 
           staged_outside_data="$(
             git diff \
@@ -1310,6 +1388,11 @@ jobs:
           PROVIDER_COUNT: ${{ steps.registry.outputs.provider_count }}
           ELIGIBLE_PROVIDER_COUNT: ${{ steps.availability.outputs.eligible_count }}
           SKIPPED_PROVIDER_COUNT: ${{ steps.availability.outputs.skipped_count }}
+          PROVIDER_DATA_REQUIREMENTS: ${{ steps.provider_data.outputs.requirements || '0' }}
+          PROVIDER_DATA_AVAILABLE: ${{ steps.provider_data.outputs.available_after_mount || '0' }}
+          PROVIDER_DATA_MOUNTED: ${{ steps.provider_data.outputs.mounted || '0' }}
+          PROVIDER_DATA_MISSING: ${{ steps.provider_data.outputs.missing || '0' }}
+          PROVIDER_DATA_PRIVATE_REPO: ${{ steps.provider_data.outputs.private_repo_available || 'false' }}
           LOADED_CREDENTIAL_COUNT: ${{ steps.credentials.outputs.loaded_count }}
           MISSING_CREDENTIAL_COUNT: ${{ steps.credentials.outputs.missing_count }}
           ARCHIVE_CHANGED: ${{ steps.changes.outputs.changed || 'false' }}
@@ -1347,6 +1430,11 @@ jobs:
               + os.environ.get("ARCHIVE_CHANGED", "false").lower()
               + "`"
           )
+          print(
+              "Private provider-data repository mounted: `"
+              + os.environ.get("PROVIDER_DATA_PRIVATE_REPO", "false").lower()
+              + "`"
+          )
           print()
           print("| Metric | Value |")
           print("|---|---:|")
@@ -1369,6 +1457,22 @@ jobs:
                       "SKIPPED_PROVIDER_COUNT",
                       "0",
                   ),
+              ),
+              (
+                  "Import-backed datasets required",
+                  os.environ.get("PROVIDER_DATA_REQUIREMENTS", "0"),
+              ),
+              (
+                  "Import-backed datasets available",
+                  os.environ.get("PROVIDER_DATA_AVAILABLE", "0"),
+              ),
+              (
+                  "Private datasets mounted",
+                  os.environ.get("PROVIDER_DATA_MOUNTED", "0"),
+              ),
+              (
+                  "Import-backed datasets missing",
+                  os.environ.get("PROVIDER_DATA_MISSING", "0"),
               ),
               ("Species", stats.get("species", 0)),
               ("Subspecies", stats.get("subspecies", 0)),
