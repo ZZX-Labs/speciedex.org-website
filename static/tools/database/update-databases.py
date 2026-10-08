@@ -210,6 +210,34 @@ def load_previous_index(path: Path, sqlite_root: Path | None = None) -> dict[str
 
     hashes: dict[str, str] = {}
 
+    if isinstance(value, Mapping) and value.get("kind") == "speciedex-sharded-index":
+        descriptors = value.get("shards")
+        if isinstance(descriptors, list):
+            root = path.parent.resolve()
+            for descriptor in descriptors:
+                if not isinstance(descriptor, Mapping):
+                    continue
+                relative = clean_text(
+                    descriptor.get("path") or descriptor.get("filename")
+                )
+                if not relative:
+                    continue
+                shard_path = (root / relative).resolve()
+                if not shard_path.is_relative_to(root) or not shard_path.is_file():
+                    continue
+                try:
+                    shard_value = json.loads(shard_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if not isinstance(shard_value, Mapping):
+                    continue
+                for identifier, record in shard_value.items():
+                    if isinstance(record, Mapping):
+                        hashes[clean_text(identifier)] = stable_json(
+                            compact_record(record)
+                        )
+            return hashes
+
     if isinstance(value, Mapping):
         for identifier, record in value.items():
             if isinstance(record, Mapping):
@@ -650,6 +678,10 @@ class DatabaseUpdater:
                     str(self.staging_root / "indexes"),
                     "--shard-size",
                     str(self.args.index_shard_size),
+                    "--shard-target-bytes",
+                    str(16 * 1024 * 1024),
+                    "--shard-max-bytes",
+                    str(45 * 1024 * 1024),
                     "--minimum-free-bytes",
                     str(self.args.minimum_free_bytes),
                 ]
@@ -1465,19 +1497,19 @@ def parse_args(
     sizing.add_argument(
         "--rows-per-shard",
         type=int,
-        default=100_000,
+        default=30_000,
         help="Maximum logical records per database shard.",
     )
     sizing.add_argument(
         "--target-bytes",
         type=int,
-        default=72 * 1024 * 1024,
+        default=40 * 1024 * 1024,
         help="Approximate target logical shard size.",
     )
     sizing.add_argument(
         "--max-bytes",
         type=int,
-        default=90 * 1024 * 1024,
+        default=48 * 1024 * 1024,
         help="Maximum permitted generated shard size.",
     )
     sizing.add_argument(
@@ -1489,7 +1521,7 @@ def parse_args(
     sizing.add_argument(
         "--index-shard-size",
         type=int,
-        default=25_000,
+        default=20_000,
         help="Records per browser species shard.",
     )
     sizing.add_argument(
@@ -1576,8 +1608,12 @@ def parse_args(
     )
     parser.add_argument(
         "--shard-indexes",
-        action="store_true",
-        help="Generate sharded browser species indexes.",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Generate GitHub-safe sharded browser species and taxonomy "
+            "indexes behind stable wrapper JSON files."
+        ),
     )
     parser.add_argument(
         "--include-canonical-name",
