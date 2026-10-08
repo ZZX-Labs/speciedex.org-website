@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "mode": "server_verified_webauthn",
+  "rp_id": "speciedex.org",
+  "admin": {
+    "gpg_fingerprint": "",
+    "credential_ids": [],
+    "require_hardware_key": true
+  },
+  "endpoints": {
+    "admin_challenge": "/api/speciedex/v1/auth/admin/challenge",
+    "admin_verify": "/api/speciedex/v1/auth/admin/verify",
+    "logout": "/api/speciedex/v1/auth/logout",
+    "account_challenge": "/api/speciedex/v1/accounts/challenge",
+    "account_verify": "/api/speciedex/v1/accounts/verify"
+  }
+}
