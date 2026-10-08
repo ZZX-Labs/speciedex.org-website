@@ -38,7 +38,7 @@ Licensed under the MIT License.
             "speciedex.terminal.splash.visibility"
         );
     const DEFAULT_CAPACITY = 256;
-    const DEFAULT_VISIBLE = 12;
+    const DEFAULT_VISIBLE = 64;
     const DEFAULT_INTERVAL = 140;
     const DEFAULT_BATCH = 1;
     const DEFAULT_STORAGE_PREFIX = "speciedex-terminal:splash";
@@ -533,6 +533,11 @@ Licensed under the MIT License.
         const klass = normalizeText(taxonomy.class).toLowerCase();
         const order = normalizeText(taxonomy.order).toLowerCase();
 
+        const statusBlob = [
+            firstField(record, ["status", "taxonomic_status", "taxonomicStatus", "conservation_status", "conservationStatus"]),
+            firstField(record, ["material", "material_type", "record_type", "dataset", "provider", "source"])
+        ].map(value => normalizeText(value).toLowerCase()).join(" ");
+        if (/extinct|fossil|paleobiolog|palaeobiolog|paleontolog|palaeontolog/.test(`${statusBlob} ${blob}`)) return "fossil";
         if (blob.includes("pollen")) return "pollen";
         if (/virus|viridae|riboviria|duplodnaviria|monodnaviria|varidnaviria|adnaviria/.test(blob)) return "virus";
         if (domain === "bacteria" || ["bacteria", "eubacteria"].includes(kingdom)) return "bacteria";
@@ -1283,6 +1288,14 @@ Licensed under the MIT License.
             this.seen = new Set();
             this.archiveRecords = [];
             this.archiveSource = null;
+            // Full-archive random permutation state.  The deck contains every
+            // eligible species/subspecies index exactly once, so a taxon can
+            // never repeat until the complete deck has been exhausted.
+            this.archiveDeck = [];
+            this.archiveDeckCursor = 0;
+            this.archiveCycle = 0;
+            this.lastArchiveIndex = null;
+            this.lastRenderedRecords = [];
             this.commonNamesIndex = new Map();
             this.commonNamesPromise = null;
             this.cursor = 0;
@@ -1952,8 +1965,11 @@ Licensed under the MIT License.
 
         wordCloudTerms() {
             const terms = [];
+            const source = this.lastRenderedRecords.length
+                ? this.lastRenderedRecords
+                : this.records;
 
-            for (const record of this.records) {
+            for (const record of source) {
                 const scientific = normalizeText(record.scientificName);
                 const common = normalizeText(record.commonName);
 
@@ -2401,35 +2417,90 @@ Licensed under the MIT License.
             return Math.floor(Math.random() * maximum);
         }
 
+        archiveRecordEligible(raw) {
+            if (!raw || typeof raw !== "object") {
+                return false;
+            }
+
+            const rank = normalizeText(
+                first(raw, [
+                    "rank",
+                    "taxon_rank",
+                    "taxonRank",
+                    "taxonomic_rank",
+                    "taxonomicRank"
+                ])
+            ).toLowerCase();
+
+            return !rank || rank === "species" || rank === "subspecies";
+        }
+
+        rebuildArchiveDeck() {
+            const deck = [];
+
+            for (let index = 0; index < this.archiveRecords.length; index += 1) {
+                if (this.archiveRecordEligible(this.archiveRecords[index])) {
+                    deck.push(index);
+                }
+            }
+
+            // Fisher-Yates using randomIndex(), which prefers crypto RNG with
+            // rejection sampling when the browser exposes crypto.getRandomValues.
+            for (let index = deck.length - 1; index > 0; index -= 1) {
+                const swapIndex = this.randomIndex(index + 1);
+                [deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]];
+            }
+
+            // Avoid an immediate boundary repeat when a new cycle starts.
+            if (
+                deck.length > 1 &&
+                this.lastArchiveIndex !== null &&
+                deck[0] === this.lastArchiveIndex
+            ) {
+                const swapIndex = 1 + this.randomIndex(deck.length - 1);
+                [deck[0], deck[swapIndex]] = [deck[swapIndex], deck[0]];
+            }
+
+            this.archiveDeck = deck;
+            this.archiveDeckCursor = 0;
+            this.archiveCycle += 1;
+
+            this._emit("archive-cycle", {
+                cycle: this.archiveCycle,
+                eligibleRecords: deck.length
+            });
+
+            return deck.length;
+        }
+
         setArchive(records, source = "Speciedex canonical archive") {
             if (this.destroyed) {
                 return 0;
             }
 
-            this.archiveRecords =
-                Array.isArray(records)
-                    ? records
-                    : [];
-            this.archiveSource =
-                normalizeText(source, "Speciedex canonical archive");
-            this.lastSource =
-                this.archiveSource;
-            this.lastIngestAt =
-                iso();
+            this.archiveRecords = Array.isArray(records) ? records : [];
+            this.archiveSource = normalizeText(
+                source,
+                "Speciedex canonical archive"
+            );
+            this.lastSource = this.archiveSource;
+            this.lastIngestAt = iso();
+            this.lastArchiveIndex = null;
+            this.archiveCycle = 0;
+            this.rebuildArchiveDeck();
 
             this.updateIndicators({
                 added: 0,
                 source: this.archiveSource
             });
 
-            this.scheduleRender({
-                wordCloud: true
-            });
-
+            this.scheduleRender({ wordCloud: true });
             this._syncState();
             this._emit("archive", {
                 source: this.archiveSource,
-                archiveRecords: this.archiveRecords.length
+                archiveRecords: this.archiveRecords.length,
+                eligibleRecords: this.archiveDeck.length,
+                cycle: this.archiveCycle
             });
 
             return this.archiveRecords.length;
@@ -2440,56 +2511,41 @@ Licensed under the MIT License.
                 return [];
             }
 
-            const target =
-                Math.min(
-                    Math.floor(count),
-                    this.archiveRecords.length
+            // Start a new cycle only when the previous permutation has been
+            // completely consumed.  We intentionally do not cross a cycle
+            // boundary inside one frame: the final frame of a cycle may be
+            // shorter, and the following frame begins the newly shuffled deck.
+            if (
+                !this.archiveDeck.length ||
+                this.archiveDeckCursor >= this.archiveDeck.length
+            ) {
+                if (!this.rebuildArchiveDeck()) {
+                    return [];
+                }
+            }
+
+            const remaining = this.archiveDeck.length - this.archiveDeckCursor;
+            const target = Math.min(Math.floor(count), remaining);
+            const selected = [];
+            let safety = Math.max(target * 4, 128);
+
+            while (
+                selected.length < target &&
+                this.archiveDeckCursor < this.archiveDeck.length &&
+                safety > 0
+            ) {
+                safety -= 1;
+                const index = this.archiveDeck[this.archiveDeckCursor];
+                this.archiveDeckCursor += 1;
+                this.lastArchiveIndex = index;
+
+                const raw = this.archiveRecords[index];
+                const record = this.applyCommonNames(
+                    normalizeRecord(
+                        raw,
+                        this.archiveSource || "Speciedex canonical archive"
+                    )
                 );
-            const selected =
-                [];
-            const used =
-                new Set();
-            const maximumAttempts =
-                Math.max(target * 32, 128);
-
-            let attempts = 0;
-
-            while (selected.length < target && attempts < maximumAttempts) {
-                attempts += 1;
-
-                const index =
-                    this.randomIndex(this.archiveRecords.length);
-
-                if (used.has(index)) {
-                    continue;
-                }
-
-                used.add(index);
-
-                const raw =
-                    this.archiveRecords[index];
-                const rank =
-                    normalizeText(
-                        first(raw, [
-                            "rank",
-                            "taxon_rank",
-                            "taxonRank",
-                            "taxonomic_rank",
-                            "taxonomicRank"
-                        ])
-                    ).toLowerCase();
-
-                if (rank && !["species", "subspecies"].includes(rank)) {
-                    continue;
-                }
-
-                const record =
-                    this.applyCommonNames(
-                        normalizeRecord(
-                            raw,
-                            this.archiveSource || "Speciedex canonical archive"
-                        )
-                    );
 
                 if (!record) {
                     continue;
@@ -2610,10 +2666,14 @@ Licensed under the MIT License.
             }
 
             if (this.elements.status) {
+                const remaining = Math.max(0, this.archiveDeck.length - this.archiveDeckCursor);
+                const randomStatus = this.archiveDeck.length
+                    ? `Random cycle ${Math.max(this.archiveCycle, 1)} · ${remaining.toLocaleString()} unshown · no repeats until exhausted`
+                    : "Live species stream active";
                 this.elements.status.textContent = added
                     ? `Streaming ${added} newly observed record${added === 1 ? "" : "s"}`
                     : this.running && !this.paused
-                        ? "Live species stream active"
+                        ? randomStatus
                         : this.paused
                             ? "Species stream paused"
                             : "Species stream stopped";
@@ -2831,6 +2891,7 @@ Licensed under the MIT License.
                 this.archiveRecords.length
                     ? this.sampleArchiveRecords(this.options.visible)
                     : [];
+            const renderedRecords = [];
             const visible =
                 archiveFrame.length ||
                 Math.min(
@@ -2849,6 +2910,8 @@ Licensed under the MIT License.
                 if (!record) {
                     continue;
                 }
+
+                renderedRecords.push(record);
 
                 const row = createElement(
                     "article",
@@ -2933,8 +2996,17 @@ Licensed under the MIT License.
             }
 
             list.replaceChildren(fragment);
+            this.lastRenderedRecords = renderedRecords;
             this.updateIndicators();
             this.metrics.renders += 1;
+
+            // The cloud is derived from the currently visible species frame,
+            // not from a stale bounded ingestion ring.
+            try {
+                this.wordCloudController?.refresh?.();
+            } catch (error) {
+                this._recordError(error);
+            }
 
             if (this.options.announce) {
                 list.setAttribute("aria-live", "polite");
@@ -2964,6 +3036,11 @@ Licensed under the MIT License.
             this.records = [];
             this.archiveRecords = [];
             this.archiveSource = null;
+            this.archiveDeck = [];
+            this.archiveDeckCursor = 0;
+            this.archiveCycle = 0;
+            this.lastArchiveIndex = null;
+            this.lastRenderedRecords = [];
             this.commonNamesIndex = new Map();
             this.commonNamesPromise = null;
             this.seen.clear();
