@@ -90,11 +90,35 @@ def main() -> int:
 
     db_snapshot = load_json(REPO_ROOT / "static/data/db/providers.json")
     api_snapshot = load_json(REPO_ROOT / "api/speciedex/v1/providers.json")
+    registry_names = {item["name"] for item in registry}
+    if isinstance(db_snapshot, dict) and "expected_providers" in db_snapshot:
+        db_materialized = db_snapshot.get("providers", [])
+        db_provider_index_ok = (
+            int(db_snapshot.get("expected_providers", -1)) == len(registry)
+            and isinstance(db_materialized, list)
+            and all(
+                (isinstance(item, str) and item in registry_names)
+                or (isinstance(item, dict) and str(item.get("provider") or item.get("id") or "") in registry_names)
+                for item in db_materialized
+            )
+        )
+        db_indexed_provider_count = len(db_materialized)
+    else:
+        db_provider_index_ok = (
+            isinstance(db_snapshot, dict)
+            and set(db_snapshot).issubset(registry_names)
+            and all(isinstance(values, list) for values in db_snapshot.values())
+        )
+        db_indexed_provider_count = len(db_snapshot) if isinstance(db_snapshot, dict) else None
+    api_provider_registry_ok = (
+        api_snapshot.get("count") == len(registry)
+        and len(api_snapshot.get("providers", [])) == len(registry)
+        and {item.get("id") for item in api_snapshot.get("providers", [])} == registry_names
+    )
     check(
         "provider-snapshots",
-        db_snapshot.get("count") == len(registry) == len(db_snapshot.get("providers", []))
-        and api_snapshot.get("count") == len(registry) == len(api_snapshot.get("providers", [])),
-        db_count=db_snapshot.get("count"),
+        db_provider_index_ok and api_provider_registry_ok,
+        db_indexed_providers=db_indexed_provider_count,
         api_count=api_snapshot.get("count"),
     )
 
@@ -156,10 +180,11 @@ def main() -> int:
 
     critical_assets = [
         "static/data/taxonomy/manifest.json",
-        "static/data/cmatrix/cmatrix-recording.json",
-        "static/icons/products/speciedex.png",
-        "static/icons/products/speciedexterminal.png",
-        "static/icons/products/speciedexapi.png",
+        "static/js/terminal/visualization/terminal-cmatrix.js",
+        "static/js/terminal/visualization/terminal-zmatrix.js",
+        "static/logos/speciedex/logo.png",
+        "static/images/taxonomy-classes/manifest.json",
+        "api/speciedex/v1/providers/assertions.json",
         "_partials/terminal.html",
     ]
     missing_assets = [item for item in critical_assets if not (REPO_ROOT / item).exists()]
@@ -168,7 +193,7 @@ def main() -> int:
     passed = sum(1 for item in checks if item["ok"])
     result = {
         "ok": passed == len(checks),
-        "version": "2026.10.06-r6",
+        "version": "2026.10.08-r7",
         "passed": passed,
         "total": len(checks),
         "checks": checks,
