@@ -467,3 +467,60 @@ Licensed under the MIT License.
     white-space: nowrap;
     word-break: normal;
 }
+
+/* =====================================================================
+   Speciedex library reader: wide taxonomic record grid
+   ===================================================================== */
+
+[data-terminal-root] .terminal-library-taxonomy-table-wrapper,
+[data-speciedex-terminal] .terminal-library-taxonomy-table-wrapper,
+#speciedex-terminal .terminal-library-taxonomy-table-wrapper {
+    box-sizing: border-box;
+    display: block;
+    max-height: min(72vh, 56rem);
+    max-width: 100%;
+    overflow: auto !important;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable both-edges;
+    scrollbar-width: thin;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+}
+
+[data-terminal-root] .terminal-library-taxonomy-table,
+[data-speciedex-terminal] .terminal-library-taxonomy-table,
+#speciedex-terminal .terminal-library-taxonomy-table {
+    table-layout: auto !important;
+    width: max-content !important;
+    min-width: 100%;
+}
+
+[data-terminal-root] .terminal-library-taxonomy-table th,
+[data-terminal-root] .terminal-library-taxonomy-table td,
+[data-speciedex-terminal] .terminal-library-taxonomy-table th,
+[data-speciedex-terminal] .terminal-library-taxonomy-table td,
+#speciedex-terminal .terminal-library-taxonomy-table th,
+#speciedex-terminal .terminal-library-taxonomy-table td {
+    max-width: none !important;
+    min-width: max-content;
+    overflow: visible;
+    overflow-wrap: normal !important;
+    text-overflow: clip !important;
+    white-space: nowrap !important;
+    word-break: normal !important;
+}
+
+[data-terminal-root] .terminal-library-taxonomy-table thead th,
+[data-speciedex-terminal] .terminal-library-taxonomy-table thead th,
+#speciedex-terminal .terminal-library-taxonomy-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+}
+
+[data-terminal-root] .terminal-library-taxonomy-table-wrapper:focus,
+[data-speciedex-terminal] .terminal-library-taxonomy-table-wrapper:focus,
+#speciedex-terminal .terminal-library-taxonomy-table-wrapper:focus {
+    outline: 1px solid var(--terminal-accent, #e6a42b);
+    outline-offset: 2px;
+}
