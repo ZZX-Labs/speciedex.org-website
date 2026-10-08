@@ -1,4 +1,4 @@
-"""Prevent false healthy maintenance status when providers were not observed."""
+"""Provider readiness must distinguish strict upstream health from publishable scans."""
 import importlib.util
 import json
 from pathlib import Path
@@ -20,13 +20,55 @@ def load_tool(filename):
 
 @pytest.mark.parametrize('bad', [None, {'error': 'upstream failure'}, {'status': 'cooldown'},
                                 {'rejected': 1}, {'fetched': -1}, {'status': 'blocked'}])
-def test_partial_or_failed_scan_cannot_pass(bad):
+def test_partial_or_failed_scan_cannot_pass_strict_health(bad):
     definitions = [{'name': 'one'}, {'name': 'two'}]
     good = {'provider': 'one', 'fetched': 2, 'rejected': 0, 'error': None}
     second = [] if bad is None else [{**good, 'provider': 'two', **bad}]
     assert not check_scan(definitions, {'providers': [good, *second]})['all_operational']
     assert check_scan(definitions, {'providers': [good, {**good, 'provider': 'two'}]})['all_operational']
     assert not check_scan(definitions, {'providers': [good, good]})['all_operational']
+
+
+def test_publishable_accepts_accounted_blocked_and_transient_failed_sources():
+    definitions = [{'name': 'live'}, {'name': 'dataset'}, {'name': 'transient'}]
+    report = {
+        'providers': [
+            {'provider': 'live', 'fetched': 4, 'rejected': 0, 'error': None},
+            {'provider': 'transient', 'fetched': 0, 'rejected': 0, 'error': 'HTTP 503'},
+        ],
+        'skipped': [
+            {'provider': 'dataset', 'reason': 'missing dataset: static/data/import/example.jsonl'},
+        ],
+    }
+    result = check_scan(definitions, report)
+    assert result['passed'] == 1
+    assert result['blocked'] == 1
+    assert result['failed'] == 1
+    assert result['coverage_complete'] is True
+    assert result['all_operational'] is False
+    assert result['publishable'] is True
+    assert result['health'] == 'degraded'
+
+
+def test_publishable_rejects_structurally_unobserved_provider():
+    definitions = [{'name': 'one'}, {'name': 'two'}]
+    result = check_scan(definitions, {
+        'providers': [{'provider': 'one', 'fetched': 1, 'rejected': 0, 'error': None}],
+    })
+    assert result['unobserved'] == 1
+    assert result['coverage_complete'] is False
+    assert result['publishable'] is False
+
+
+def test_publishable_rejects_zero_successful_sources():
+    definitions = [{'name': 'one'}, {'name': 'two'}]
+    result = check_scan(definitions, {
+        'providers': [{'provider': 'one', 'fetched': 0, 'rejected': 0, 'error': 'HTTP 500'}],
+        'skipped': [{'provider': 'two', 'reason': 'missing dataset'}],
+    })
+    assert result['passed'] == 0
+    assert result['coverage_complete'] is True
+    assert result['publishable'] is False
 
 
 @pytest.mark.parametrize('age,rejected,accepted', [('current', 0, True), ('stale', 0, False), ('current', 1, False)])
