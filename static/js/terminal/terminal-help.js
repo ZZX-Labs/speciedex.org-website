@@ -744,7 +744,12 @@ Licensed under the MIT License.
                 String(
                     command.usage ||
                     name
-                )
+                ),
+            access:
+                String(
+                    command.access ||
+                    (command.adminOnly === true ? "admin" : "public")
+                ).toLowerCase()
         };
     }
 
@@ -1541,7 +1546,8 @@ Licensed under the MIT License.
                 "No description available.",
                 "",
                 `Usage: ${command.usage}`,
-                `Category: ${command.category}`
+                `Category: ${command.category}`,
+                `Access: ${command.access || "public"}`
             ];
 
             if (command.aliases.length) {
@@ -1684,7 +1690,7 @@ Licensed under the MIT License.
                     entries
                 ) {
                     lines.push(
-                        `  ${command.name.padEnd(24)} ${command.description}`
+                        `  ${command.name.padEnd(24)} ${command.description}${command.access === "admin" ? " [admin]" : ""}`
                     );
                 }
 
