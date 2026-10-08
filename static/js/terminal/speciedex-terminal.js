@@ -56,6 +56,7 @@ Licensed under the MIT License.
             "Loading",
             "Theme",
             "Settings",
+            "UserAccount",
             "Library",
             "Index"
         ],
@@ -63,6 +64,7 @@ Licensed under the MIT License.
             "Layout",
             "Windows",
             "Toolbar",
+            "SettingsUI",
             "Statusbar",
             "Notifications",
             "Progress",
@@ -697,6 +699,13 @@ Licensed under the MIT License.
                 description: String(definition.description || "No description."),
                 usage: String(definition.usage || name),
                 category: String(definition.category || "general"),
+                access: String(
+                    definition.access ||
+                    (definition.adminOnly === true ? "admin" : "") ||
+                    (definition.requiresAccount === true ? "user" : "") ||
+                    (String(definition.category || "").toLowerCase() === "admin" ? "admin" : "public")
+                ).toLowerCase(),
+                adminOnly: definition.adminOnly === true || String(definition.access || "").toLowerCase() === "admin",
                 hidden: definition.hidden === true,
                 completer: typeof definition.completer === "function"
                     ? definition.completer
@@ -800,6 +809,8 @@ Licensed under the MIT License.
                     `Command not found: ${parsed.invokedAs || parsed.name}`
                 );
             }
+
+            await this.app.authorizeCommand(command);
 
             return command.handler({
                 app: this.app,
@@ -1108,7 +1119,7 @@ Licensed under the MIT License.
                 promptHost:
                     options.promptHost ||
                     root.dataset.terminalPromptHost ||
-                    "speciedex",
+                    "speciedex.org",
                 promptPath:
                     options.promptPath ||
                     root.dataset.terminalPromptPath ||
@@ -1522,6 +1533,8 @@ Licensed under the MIT License.
                     "module initialization",
                     () => this.initializeModuleGroups()
                 );
+
+                this.setPromptIdentity(this.currentIdentity());
 
                 await this.runInitializationPhase(
                     "command registration",
@@ -2135,6 +2148,14 @@ Licensed under the MIT License.
                     capture:
                         true
                 }
+            );
+
+            this.root.addEventListener(
+                "speciedex:terminal-identity-change",
+                event => {
+                    this.setPromptIdentity(event.detail || {});
+                },
+                { signal }
             );
 
             this.root.addEventListener(
@@ -2956,6 +2977,32 @@ Licensed under the MIT License.
                 usage: "modules [--missing]",
                 handler: ({ flags, options }) =>
                     this.commandModules(Boolean(flags.missing || options.missing))
+            });
+
+            register({
+                name: "commands-audit",
+                aliases: ["command-audit"],
+                category: "core",
+                description: "Audit the live command registry, source module, handler presence, and access level.",
+                usage: "commands-audit [--admin]",
+                handler: ({ flags, options }) => {
+                    const adminOnly = Boolean(flags.admin || options.admin);
+                    const rows = this.commandRegistry.list({ includeHidden: true })
+                        .filter(command => !adminOnly || command.access === "admin")
+                        .map(command => [
+                            command.name,
+                            command.category,
+                            command.access || "public",
+                            command.source || "application",
+                            typeof command.handler === "function" ? "registered" : "missing"
+                        ]);
+                    this.writeTable(["Command", "Category", "Access", "Source", "Handler"], rows);
+                    return {
+                        total: rows.length,
+                        admin_only: rows.filter(row => row[2] === "admin").length,
+                        missing_handlers: rows.filter(row => row[4] !== "registered").length
+                    };
+                }
             });
 
             register({
@@ -4992,6 +5039,62 @@ Licensed under the MIT License.
             this.root
                 .querySelector("[data-terminal-bootstrap-message]")
                 ?.remove();
+        }
+
+        currentIdentity() {
+            const account =
+                this.context?.userAccount ||
+                this.context?.services?.get?.("user-account") ||
+                null;
+
+            return account?.identity?.() || {
+                role: "public",
+                username: "public",
+                authenticated: false
+            };
+        }
+
+        async authorizeCommand(command) {
+            const access = String(command?.access || "public").toLowerCase();
+            if (!access || access === "public") {
+                return true;
+            }
+
+            const account =
+                this.context?.userAccount ||
+                this.context?.services?.get?.("user-account") ||
+                null;
+
+            if (account?.can?.(access)) {
+                return true;
+            }
+
+            if (access === "admin") {
+                throw new Error(
+                    `Command "${command?.name || "(unknown)"}" is administrator-only. ` +
+                    "Authenticate with admin-login using the designated hardware credential."
+                );
+            }
+
+            throw new Error(
+                `Command "${command?.name || "(unknown)"}" requires an authenticated user account.`
+            );
+        }
+
+        setPromptIdentity(identity = {}) {
+            const role = String(identity.role || "public").toLowerCase();
+            const user = role === "admin" ? "admin" : "public";
+            this.options.promptUser = user;
+            this.options.promptHost = "speciedex.org";
+
+            for (const root of this.roots || [this.root]) {
+                const userNode = root.querySelector?.("[data-terminal-prompt-user]");
+                const hostNode = root.querySelector?.("[data-terminal-prompt-host]");
+                if (userNode) userNode.textContent = user;
+                if (hostNode) hostNode.textContent = "speciedex.org";
+            }
+
+            return this.promptText();
         }
 
         promptText() {
