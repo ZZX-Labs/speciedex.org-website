@@ -488,10 +488,227 @@ Licensed under the MIT License.
         return "";
     }
 
+    const RANK_KEY_ALIASES = Object.freeze({
+        classname: "class",
+        class_: "class",
+        ordername: "order",
+        order_: "order",
+        speciesname: "species",
+        superkingdomname: "superkingdom",
+        subkingdomname: "subkingdom",
+        phylumname: "phylum",
+        divisionname: "division",
+        familyname: "family",
+        genusname: "genus",
+        subspeciesname: "subspecies"
+    });
+
     function normalizeRankKey(value) {
-        return normalizeText(value)
+        const normalized = normalizeText(value)
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, "");
+
+        return RANK_KEY_ALIASES[normalized] || normalized;
+    }
+
+    function uniqueTextValues(values) {
+        const result = [];
+        const seen = new Set();
+
+        for (const value of values) {
+            const text = normalizeText(value);
+            const key = text.toLocaleLowerCase();
+            if (!text || seen.has(key)) {
+                continue;
+            }
+            seen.add(key);
+            result.push(text);
+        }
+
+        return result;
+    }
+
+    function collectListValues(value, itemFields = []) {
+        const values = [];
+
+        const visit = item => {
+            if (item === undefined || item === null) {
+                return;
+            }
+
+            if (Array.isArray(item)) {
+                for (const child of item) {
+                    visit(child);
+                }
+                return;
+            }
+
+            if (typeof item === "string" || typeof item === "number") {
+                values.push(item);
+                return;
+            }
+
+            if (!isRecord(item)) {
+                return;
+            }
+
+            for (const field of itemFields) {
+                const candidate = item[field];
+                if (candidate === undefined || candidate === null) {
+                    continue;
+                }
+                if (Array.isArray(candidate) || isRecord(candidate)) {
+                    visit(candidate);
+                    if (values.length) {
+                        return;
+                    }
+                    continue;
+                }
+                if (normalizeText(candidate)) {
+                    values.push(candidate);
+                    return;
+                }
+            }
+        };
+
+        visit(value);
+        return uniqueTextValues(values);
+    }
+
+    function recordContainers(record) {
+        if (!isRecord(record)) {
+            return [];
+        }
+
+        const assertion = isRecord(record.assertion) ? record.assertion : null;
+        const taxon = isRecord(record.taxon) ? record.taxon : null;
+
+        return [
+            record,
+            taxon,
+            assertion,
+            isRecord(record.extra) ? record.extra : null,
+            isRecord(taxon?.extra) ? taxon.extra : null,
+            isRecord(assertion?.extra) ? assertion.extra : null
+        ].filter(Boolean);
+    }
+
+    function allRecordValues(record, scalarFields, listFields = [], itemFields = []) {
+        const values = [];
+
+        for (const container of recordContainers(record)) {
+            for (const field of scalarFields) {
+                const value = container[field];
+                if (value !== undefined && value !== null && normalizeText(value)) {
+                    values.push(value);
+                }
+            }
+
+            for (const field of listFields) {
+                values.push(...collectListValues(container[field], itemFields));
+            }
+        }
+
+        return uniqueTextValues(values);
+    }
+
+    function commonNames(record) {
+        const names = allRecordValues(
+            record,
+            [
+                "common_name", "commonName", "vernacular_name",
+                "vernacularName", "preferred_common_name",
+                "preferredCommonName", "english_name", "englishName",
+                "local_name", "localName"
+            ],
+            [
+                "common_names", "commonNames", "vernacular_names",
+                "vernacularNames", "english_names", "englishNames"
+            ],
+            [
+                "name", "value", "label", "common_name", "commonName",
+                "vernacular_name", "vernacularName", "english_name",
+                "englishName", "local_name", "localName"
+            ]
+        );
+
+        const scientific = normalizeText(firstRecordValue(record, [
+            "scientific_name", "scientificName", "canonical_name",
+            "canonicalName", "accepted_name", "acceptedName", "name"
+        ])).toLocaleLowerCase();
+
+        return names.filter(name => name.toLocaleLowerCase() !== scientific);
+    }
+
+    function sourceProviders(record) {
+        const values = allRecordValues(
+            record,
+            ["provider", "source", "dataset", "dataset_name", "datasetName"],
+            ["providers", "sources"],
+            ["provider", "source", "name", "dataset"]
+        );
+
+        const initialProvider = normalizeText(
+            record?.initial_source?.provider ??
+            record?.initialSource?.provider
+        );
+        if (initialProvider) {
+            values.unshift(initialProvider);
+        }
+
+        return uniqueTextValues(values);
+    }
+
+    function sourceIdentifiers(record) {
+        const values = allRecordValues(
+            record,
+            [
+                "provider_id", "providerId", "provider_taxon_id",
+                "providerTaxonId", "source_id", "sourceId", "taxon_id",
+                "taxonId", "gbif_key", "gbifKey", "worms_id",
+                "wormsId", "itis_tsn", "itisTsn"
+            ],
+            ["provider_ids", "providerIds", "source_ids", "sourceIds"],
+            ["id", "provider_id", "providerId", "value"]
+        );
+
+        const initialID = normalizeText(
+            record?.initial_source?.provider_id ??
+            record?.initialSource?.providerId
+        );
+        if (initialID) {
+            values.unshift(initialID);
+        }
+
+        return uniqueTextValues(values);
+    }
+
+    function sourceURLs(record) {
+        const values = allRecordValues(
+            record,
+            ["source_url", "sourceUrl", "url", "canonical_url", "canonicalUrl"],
+            ["source_urls", "sourceUrls"],
+            ["url", "source_url", "sourceUrl", "value"]
+        );
+
+        const initialURL = normalizeText(
+            record?.initial_source?.url ??
+            record?.initialSource?.url
+        );
+        if (initialURL) {
+            values.unshift(initialURL);
+        }
+
+        return uniqueTextValues(values);
+    }
+
+    function synonymValues(record) {
+        return allRecordValues(
+            record,
+            [],
+            ["synonyms", "synonym_names", "synonymNames"],
+            ["scientific_name", "scientificName", "name", "value"]
+        );
     }
 
     function rankLabel(rank) {
@@ -667,37 +884,53 @@ Licensed under the MIT License.
         const ranks = taxonomyRanks(records);
         const headers = [
             "Scientific Name",
-            "Common Name",
+            "Canonical Name",
+            "Preferred Common Name",
+            "All Common Names",
             "Authorship",
             "Rank",
             "Status",
             "Source / Provider",
-            "Provider ID",
+            "All Providers",
+            "Provider Record ID",
+            "Source URLs",
             "Speciedex ID",
+            "Date Added",
+            "Last Seen",
+            "Source Modified",
+            "Synonyms",
+            "Source Count",
+            "License",
+            "Country",
+            "Region / Locality",
+            "Latitude",
+            "Longitude",
+            "Identity Key",
             ...ranks.map(rankLabel)
         ];
 
         const rows = records.map(record => {
             const taxonomy = taxonomyMap(record);
-            const assertion = isRecord(record.assertion) ? record.assertion : null;
-            const sourceProvider = firstRecordValue(record, [
-                "provider", "source", "dataset", "dataset_name", "datasetName"
-            ]) ||
-                normalizeText(record.initial_source?.provider ?? record.initialSource?.provider) ||
-                normalizeText(assertion?.extra?.source);
-            const providerID = firstRecordValue(record, [
-                "provider_id", "providerId", "source_id", "sourceId",
-                "taxon_id", "taxonId", "gbif_key", "gbifKey",
-                "worms_id", "wormsId", "itis_tsn", "itisTsn"
-            ]) ||
-                normalizeText(record.initial_source?.provider_id ?? record.initialSource?.providerId);
+            const providers = sourceProviders(record);
+            const providerIDs = sourceIdentifiers(record);
+            const urls = sourceURLs(record);
+            const names = commonNames(record);
+            const synonyms = synonymValues(record);
             const explicitSpeciedexID = firstRecordValue(record, [
                 "speciedex_id", "speciedexId", "speciedex_key",
-                "speciedexKey", "canonical_id", "canonicalId"
+                "speciedexKey", "canonical_id", "canonicalId", "id"
             ]);
             const resolvedRecordID = resolveRecordID(record, library.options.idFields) || "";
             const speciedexID = explicitSpeciedexID ||
                 (/^(?:spx:|speciedex:)/i.test(resolvedRecordID) ? resolvedRecordID : "");
+            const preferredCommonName = firstRecordValue(record, [
+                "preferred_common_name", "preferredCommonName",
+                "common_name", "commonName", "vernacular_name",
+                "vernacularName", "english_name", "englishName"
+            ]) || names[0] || "";
+            const providerCount = Number(firstRecordValue(record, [
+                "source_count", "sourceCount", "provider_count", "providerCount"
+            ]));
 
             return [
                 firstRecordValue(record, [
@@ -705,9 +938,11 @@ Licensed under the MIT License.
                     "canonicalName", "accepted_name", "acceptedName", "name"
                 ]),
                 firstRecordValue(record, [
-                    "common_name", "commonName", "vernacular_name",
-                    "vernacularName", "preferred_common_name", "preferredCommonName"
+                    "canonical_name", "canonicalName", "accepted_name",
+                    "acceptedName"
                 ]),
+                preferredCommonName,
+                names.join("; "),
                 firstRecordValue(record, [
                     "authorship", "authority", "scientific_name_authorship",
                     "scientificNameAuthorship"
@@ -719,9 +954,35 @@ Licensed under the MIT License.
                     "status", "taxonomic_status", "taxonomicStatus",
                     "accepted_status", "acceptedStatus"
                 ]),
-                sourceProvider,
-                providerID,
+                providers[0] || "",
+                providers.join("; "),
+                providerIDs.join("; "),
+                urls.join("; "),
                 speciedexID,
+                firstRecordValue(record, [
+                    "date_added", "dateAdded", "first_seen", "firstSeen",
+                    "created_at", "createdAt", "indexed_at", "indexedAt"
+                ]),
+                firstRecordValue(record, [
+                    "last_seen", "lastSeen", "updated_at", "updatedAt",
+                    "retrieved_at", "retrievedAt", "changed_at", "changedAt"
+                ]),
+                firstRecordValue(record, [
+                    "source_modified", "sourceModified", "modified",
+                    "provider_modified", "providerModified"
+                ]),
+                synonyms.join("; "),
+                Number.isFinite(providerCount) && providerCount > 0
+                    ? providerCount
+                    : providers.length || "",
+                firstRecordValue(record, ["license", "licence", "rights"]),
+                firstRecordValue(record, ["country", "country_code", "countryCode"]),
+                firstRecordValue(record, [
+                    "region", "stateProvince", "state_province", "locality"
+                ]),
+                firstRecordValue(record, ["latitude", "lat", "decimalLatitude"]),
+                firstRecordValue(record, ["longitude", "lon", "lng", "decimalLongitude"]),
+                firstRecordValue(record, ["identity_key", "identityKey"]),
                 ...ranks.map(rank => taxonomy.get(rank) || "")
             ];
         });
@@ -3433,10 +3694,42 @@ Licensed under the MIT License.
             value?.headers &&
             value?.rows
         ) {
-            return payload.writeTable(
+            const rendered = payload.writeTable(
                 value.headers,
                 value.rows
             );
+
+            const options = isObject(value.options)
+                ? value.options
+                : {};
+
+            if (rendered && typeof rendered.querySelector === "function") {
+                if (options.wrapperClassName && rendered.classList) {
+                    rendered.classList.add(options.wrapperClassName);
+                }
+
+                if (options.scrollX === true) {
+                    rendered.setAttribute?.("data-scroll-x", "true");
+                    rendered.tabIndex = 0;
+                }
+
+                if (options.ariaLabel) {
+                    rendered.setAttribute?.("aria-label", options.ariaLabel);
+                    rendered.setAttribute?.("role", "region");
+                }
+
+                const table = rendered.querySelector("table");
+                if (table) {
+                    if (options.tableClassName && table.classList) {
+                        table.classList.add(options.tableClassName);
+                    }
+                    if (options.nowrap === true) {
+                        table.classList.add("terminal-table-nowrap");
+                    }
+                }
+            }
+
+            return rendered;
         }
 
         if (
