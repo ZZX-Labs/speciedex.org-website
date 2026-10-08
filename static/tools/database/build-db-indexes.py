@@ -48,9 +48,12 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 
-SCHEMA_VERSION = 3
-DEFAULT_SHARD_SIZE = 25_000
+SCHEMA_VERSION = 4
+DEFAULT_SHARD_SIZE = 20_000
+DEFAULT_SHARD_TARGET_BYTES = 16 * 1024 * 1024
+DEFAULT_SHARD_MAX_BYTES = 45 * 1024 * 1024
 DEFAULT_MINIMUM_FREE_BYTES = 64 * 1024 * 1024
+SHARDED_INDEX_KIND = "speciedex-sharded-index"
 MANIFEST_FILENAME = "manifest.json"
 SOURCE_MODES = ("auto", "manifest", "volumes", "recursive")
 GENERATED_INDEX_FILES = (
@@ -674,8 +677,19 @@ class BrowserIndexBuilder:
                 f"Taxonomy root is not a directory: {self.taxonomy_root}"
             )
 
+        if not self.args.shard:
+            raise IndexBuildError(
+                "Unsharded browser indexes are disabled because the complete "
+                "Speciedex indexes exceed GitHub file-size limits."
+            )
         if self.args.shard_size < 1:
             raise IndexBuildError("--shard-size must be at least 1.")
+        if self.args.shard_target_bytes < 1:
+            raise IndexBuildError("--shard-target-bytes must be at least 1.")
+        if self.args.shard_max_bytes < self.args.shard_target_bytes:
+            raise IndexBuildError(
+                "--shard-max-bytes cannot be smaller than --shard-target-bytes."
+            )
 
         self.discover_sources()
         self.output.mkdir(parents=True, exist_ok=True)
@@ -1178,94 +1192,247 @@ class BrowserIndexBuilder:
                 path.unlink(missing_ok=True)
 
         if self.shard_root.exists():
-            for path in self.shard_root.glob("species-*.json"):
+            for path in self.shard_root.glob("*.json"):
                 self.logger.info("Removing generated shard: %s", path)
                 if not self.args.dry_run:
                     path.unlink(missing_ok=True)
 
-    def write_shards(
+    @staticmethod
+    def _compact_size(value: Any) -> int:
+        return len(
+            json.dumps(
+                value,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        )
+
+    def _write_shard_file(
         self,
-        species: Mapping[str, Mapping[str, Any]],
-    ) -> list[dict[str, Any]]:
-        if not self.args.shard:
-            return []
-
+        *,
+        index_name: str,
+        shard_number: int,
+        payload: Mapping[str, Any],
+        records: int,
+        first_key: str = "",
+        last_key: str = "",
+    ) -> dict[str, Any]:
         self.shard_root.mkdir(parents=True, exist_ok=True)
-        entries = list(species.items())
+        filename = f"{index_name}-{shard_number:05d}.json"
+        relative = f"shards/{filename}"
+        path = self.shard_root / filename
+
+        if not self.args.dry_run:
+            atomic_write_json_compact(path, payload)
+            size = json_size(path)
+            if size > self.args.shard_max_bytes:
+                raise IndexBuildError(
+                    f"Generated index shard exceeds --shard-max-bytes: "
+                    f"{relative}={size} > {self.args.shard_max_bytes}."
+                )
+            digest = sha256_file(path)
+            self.index_files.append(
+                IndexFile(
+                    filename=relative,
+                    records=records,
+                    bytes=size,
+                    sha256=digest,
+                )
+            )
+        else:
+            size = 0
+            digest = ""
+
+        return {
+            "id": f"{shard_number:05d}",
+            "filename": relative,
+            "path": relative,
+            "records": records,
+            "first_key": first_key,
+            "last_key": last_key,
+            "bytes": size,
+            "sha256": digest,
+        }
+
+    def write_mapping_shards(
+        self,
+        index_name: str,
+        mapping: Mapping[str, Any],
+    ) -> list[dict[str, Any]]:
         shards: list[dict[str, Any]] = []
+        chunk: dict[str, Any] = {}
+        estimated = 2
 
-        for shard_number, start in enumerate(
-            range(0, len(entries), self.args.shard_size)
-        ):
-            chunk = entries[start : start + self.args.shard_size]
-            filename = f"species-{shard_number:05d}.json"
-            relative = f"shards/{filename}"
-            payload = dict(chunk)
-            path = self.shard_root / filename
+        def flush() -> None:
+            nonlocal chunk, estimated
+            if not chunk:
+                return
+            keys = list(chunk)
+            shards.append(
+                self._write_shard_file(
+                    index_name=index_name,
+                    shard_number=len(shards),
+                    payload=chunk,
+                    records=len(chunk),
+                    first_key=keys[0],
+                    last_key=keys[-1],
+                )
+            )
+            chunk = {}
+            estimated = 2
 
-            if not self.args.dry_run:
-                atomic_write_json_compact(path, payload)
+        for key, value in mapping.items():
+            item = {key: value}
+            item_size = self._compact_size(item) + 1
+            if item_size > self.args.shard_max_bytes:
+                raise IndexBuildError(
+                    f"Single {index_name} index entry exceeds shard maximum: "
+                    f"{key} ({item_size} bytes)."
+                )
+            if chunk and (
+                len(chunk) >= self.args.shard_size
+                or estimated + item_size > self.args.shard_target_bytes
+            ):
+                flush()
+            chunk[key] = value
+            estimated += item_size
 
-            descriptor = {
-                "id": f"{shard_number:05d}",
-                "filename": relative,
-                "path": relative,
-                "records": len(chunk),
-                "first_id": chunk[0][0] if chunk else "",
-                "last_id": chunk[-1][0] if chunk else "",
-                "bytes": (
-                    0 if self.args.dry_run else json_size(path)
-                ),
-                "sha256": (
-                    "" if self.args.dry_run else sha256_file(path)
-                ),
-            }
-            shards.append(descriptor)
-
+        flush()
         return shards
+
+    def write_taxonomy_shards(
+        self,
+        taxonomy: Mapping[str, Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        shards: list[dict[str, Any]] = []
+        chunk: dict[str, dict[str, Any]] = {}
+        estimated = 2
+        value_count = 0
+        first_key = ""
+        last_key = ""
+
+        def flush() -> None:
+            nonlocal chunk, estimated, value_count, first_key, last_key
+            if not chunk:
+                return
+            descriptor = self._write_shard_file(
+                index_name="taxonomy",
+                shard_number=len(shards),
+                payload=chunk,
+                records=value_count,
+                first_key=first_key,
+                last_key=last_key,
+            )
+            descriptor["taxonomy_values"] = value_count
+            shards.append(descriptor)
+            chunk = {}
+            estimated = 2
+            value_count = 0
+            first_key = ""
+            last_key = ""
+
+        for rank, values in taxonomy.items():
+            if not isinstance(values, Mapping):
+                continue
+            for value, identifiers in values.items():
+                item_key = f"{rank}:{value}"
+                item = {rank: {value: identifiers}}
+                item_size = self._compact_size(item) + 1
+                if item_size > self.args.shard_max_bytes:
+                    raise IndexBuildError(
+                        "Single taxonomy index entry exceeds shard maximum: "
+                        f"{item_key} ({item_size} bytes)."
+                    )
+                if chunk and (
+                    value_count >= self.args.shard_size
+                    or estimated + item_size > self.args.shard_target_bytes
+                ):
+                    flush()
+                chunk.setdefault(rank, {})[value] = identifiers
+                estimated += item_size
+                value_count += 1
+                if not first_key:
+                    first_key = item_key
+                last_key = item_key
+
+        flush()
+        return shards
+
+    def write_sharded_wrapper(
+        self,
+        filename: str,
+        *,
+        index_name: str,
+        merge: str,
+        records: int,
+        shards: Sequence[Mapping[str, Any]],
+    ) -> Path:
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "kind": SHARDED_INDEX_KIND,
+            "index": index_name,
+            "merge": merge,
+            "generated_at": utc_now(),
+            "recordCount": records,
+            "records": records,
+            "shardCount": len(shards),
+            "shard_target_bytes": self.args.shard_target_bytes,
+            "shard_max_bytes": self.args.shard_max_bytes,
+            "shards": list(shards),
+        }
+        return self.write_index(filename, payload, records=records)
 
     def write_outputs(self) -> dict[str, Any]:
         species, names, providers, taxonomy = self.normalize_indexes()
 
-        self.write_index(
+        species_shards = self.write_mapping_shards("species", species)
+        taxonomy_shards = self.write_taxonomy_shards(taxonomy)
+
+        self.write_sharded_wrapper(
             "species.json",
-            species,
+            index_name="species",
+            merge="mapping",
             records=len(species),
-            compact=True,
+            shards=species_shards,
         )
         self.write_index(
             "names.json",
             names,
             records=len(names),
+            compact=True,
         )
         self.write_index(
             "providers.json",
             providers,
             records=len(providers),
+            compact=True,
         )
-        self.write_index(
+        taxonomy_value_count = sum(
+            len(values) for values in taxonomy.values()
+        )
+        self.write_sharded_wrapper(
             "taxonomy.json",
-            taxonomy,
-            records=sum(
-                len(values)
-                for values in taxonomy.values()
-            ),
+            index_name="taxonomy",
+            merge="taxonomy",
+            records=taxonomy_value_count,
+            shards=taxonomy_shards,
         )
 
-        shard_index = self.write_shards(species)
-
-        if self.args.shard:
-            self.write_index(
-                "shards.json",
-                {
-                    "schema_version": SCHEMA_VERSION,
-                    "generated_at": utc_now(),
-                    "shard_size": self.args.shard_size,
-                    "records": len(species),
-                    "shards": shard_index,
-                },
-                records=len(shard_index),
-            )
+        all_shards = {
+            "schema_version": SCHEMA_VERSION,
+            "generated_at": utc_now(),
+            "kind": "browser-index-shards",
+            "shard_target_bytes": self.args.shard_target_bytes,
+            "shard_max_bytes": self.args.shard_max_bytes,
+            "species": species_shards,
+            "taxonomy": taxonomy_shards,
+        }
+        self.write_index(
+            "shards.json",
+            all_shards,
+            records=len(species_shards) + len(taxonomy_shards),
+        )
 
         source_files = [
             (
@@ -1292,11 +1459,10 @@ class BrowserIndexBuilder:
                 "duplicate_ids": self.duplicate_ids,
                 "name_keys": len(names),
                 "providers": len(providers),
-                "taxonomy_values": sum(
-                    len(values)
-                    for values in taxonomy.values()
-                ),
-                "shards": len(shard_index),
+                "taxonomy_values": taxonomy_value_count,
+                "shards": len(species_shards) + len(taxonomy_shards),
+                "species_shards": len(species_shards),
+                "taxonomy_shards": len(taxonomy_shards),
                 "revision_assertions_scanned": self.revision_records,
                 "revision_enriched_records": self.enriched_records,
                 "records_with_common_names": self.common_name_records,
@@ -1311,38 +1477,68 @@ class BrowserIndexBuilder:
             "options": {
                 "strict": self.args.strict,
                 "duplicate_policy": self.args.duplicate_policy,
-                "include_canonical_name": (
-                    self.args.include_canonical_name
-                ),
+                "include_canonical_name": self.args.include_canonical_name,
                 "include_taxonomy": self.args.include_taxonomy,
                 "revision_enrichment": self.args.revision_enrichment,
                 "revisions_root": self.revisions_root.as_posix(),
-                "compact_species_json": True,
-                "sharded": bool(self.args.shard),
-                "shard_size": (
-                    self.args.shard_size
-                    if self.args.shard
-                    else None
-                ),
+                "sharded": True,
+                "shard_size": self.args.shard_size,
+                "shard_target_bytes": self.args.shard_target_bytes,
+                "shard_max_bytes": self.args.shard_max_bytes,
             },
-            "indexes": [
-                asdict(index_file)
-                for index_file in self.index_files
-            ],
-            "shards": shard_index,
+            "indexes": [asdict(index_file) for index_file in self.index_files],
+            "shards": {
+                "species": species_shards,
+                "taxonomy": taxonomy_shards,
+            },
             "issues": list(self.issues),
-            "duration_seconds": round(
-                time.monotonic() - self.started,
-                6,
-            ),
+            "duration_seconds": round(time.monotonic() - self.started, 6),
         }
 
-        self.write_index(
-            "manifest.json",
-            manifest,
-            records=len(species),
-        )
+        self.write_index("manifest.json", manifest, records=len(species))
         return manifest
+
+    def _verify_shard_descriptors(
+        self,
+        descriptors: Sequence[Mapping[str, Any]],
+        *,
+        taxonomy: bool = False,
+    ) -> int:
+        total = 0
+        for entry in descriptors:
+            relative = clean_text(entry.get("path") or entry.get("filename"))
+            shard_path = (self.output / relative).resolve()
+            try:
+                shard_path.relative_to(self.output.resolve())
+            except ValueError as error:
+                raise IndexBuildError(
+                    f"Shard path escapes output root: {relative}"
+                ) from error
+            payload = load_json_object(shard_path)
+            if shard_path.stat().st_size > self.args.shard_max_bytes:
+                raise IndexBuildError(
+                    f"Shard exceeds maximum size: {relative}."
+                )
+            if shard_path.stat().st_size != int(entry.get("bytes", -1)):
+                raise IndexBuildError(f"Shard size mismatch for {relative}.")
+            if sha256_file(shard_path) != clean_text(entry.get("sha256")):
+                raise IndexBuildError(f"Shard checksum mismatch for {relative}.")
+            if taxonomy:
+                actual = sum(
+                    len(values)
+                    for values in payload.values()
+                    if isinstance(values, Mapping)
+                )
+            else:
+                actual = len(payload)
+            expected = int(entry.get("records", -1))
+            if actual != expected:
+                raise IndexBuildError(
+                    f"Shard count mismatch for {relative}: "
+                    f"manifest={expected}, actual={actual}."
+                )
+            total += actual
+        return total
 
     def verify_outputs(
         self,
@@ -1356,12 +1552,9 @@ class BrowserIndexBuilder:
             self.output / "names.json",
             self.output / "providers.json",
             self.output / "taxonomy.json",
+            self.output / "shards.json",
             self.output / "manifest.json",
         ]
-
-        if self.args.shard:
-            required.append(self.output / "shards.json")
-
         for path in required:
             if not path.is_file():
                 raise IndexBuildError(
@@ -1369,152 +1562,69 @@ class BrowserIndexBuilder:
                 )
             load_json_object(path)
 
-        species = load_json_object(self.output / "species.json")
+        species_wrapper = load_json_object(self.output / "species.json")
+        taxonomy_wrapper = load_json_object(self.output / "taxonomy.json")
         names = load_json_object(self.output / "names.json")
         providers = load_json_object(self.output / "providers.json")
-        taxonomy = load_json_object(self.output / "taxonomy.json")
-        persisted_manifest = load_json_object(
-            self.output / "manifest.json"
+        persisted_manifest = load_json_object(self.output / "manifest.json")
+
+        if species_wrapper.get("kind") != SHARDED_INDEX_KIND:
+            raise IndexBuildError("species.json is not a sharded index wrapper.")
+        if taxonomy_wrapper.get("kind") != SHARDED_INDEX_KIND:
+            raise IndexBuildError("taxonomy.json is not a sharded index wrapper.")
+
+        expected_records = int(manifest.get("totals", {}).get("records", -1))
+        species_shards = species_wrapper.get("shards")
+        if not isinstance(species_shards, list):
+            raise IndexBuildError("species.json shards must be an array.")
+        actual_species = self._verify_shard_descriptors(species_shards)
+        if actual_species != expected_records:
+            raise IndexBuildError(
+                f"Species shard total mismatch: manifest={expected_records}, "
+                f"actual={actual_species}."
+            )
+        if int(species_wrapper.get("recordCount", -1)) != expected_records:
+            raise IndexBuildError("species.json wrapper recordCount mismatch.")
+
+        expected_taxonomy = int(
+            manifest.get("totals", {}).get("taxonomy_values", -1)
         )
-
-        expected_records = int(
-            manifest.get("totals", {}).get("records", -1)
+        taxonomy_shards = taxonomy_wrapper.get("shards")
+        if not isinstance(taxonomy_shards, list):
+            raise IndexBuildError("taxonomy.json shards must be an array.")
+        actual_taxonomy = self._verify_shard_descriptors(
+            taxonomy_shards, taxonomy=True
         )
-        if len(species) != expected_records:
+        if actual_taxonomy != expected_taxonomy:
             raise IndexBuildError(
-                f"species.json record count mismatch: "
-                f"manifest={expected_records}, actual={len(species)}."
+                f"Taxonomy shard total mismatch: manifest={expected_taxonomy}, "
+                f"actual={actual_taxonomy}."
             )
 
-        if (
-            len(names)
-            != int(manifest.get("totals", {}).get("name_keys", -1))
-        ):
-            raise IndexBuildError(
-                "names.json key count does not match manifest."
-            )
-
-        if (
-            len(providers)
-            != int(manifest.get("totals", {}).get("providers", -1))
-        ):
-            raise IndexBuildError(
-                "providers.json key count does not match manifest."
-            )
-
-        actual_taxonomy_values = sum(
-            len(values)
-            for values in taxonomy.values()
-            if isinstance(values, Mapping)
-        )
-        if (
-            actual_taxonomy_values
-            != int(
-                manifest.get("totals", {}).get(
-                    "taxonomy_values",
-                    -1,
-                )
-            )
-        ):
-            raise IndexBuildError(
-                "taxonomy.json value count does not match manifest."
-            )
-
+        if len(names) != int(manifest.get("totals", {}).get("name_keys", -1)):
+            raise IndexBuildError("names.json key count does not match manifest.")
+        if len(providers) != int(manifest.get("totals", {}).get("providers", -1)):
+            raise IndexBuildError("providers.json key count does not match manifest.")
         if persisted_manifest.get("kind") != "browser-indexes":
-            raise IndexBuildError(
-                "Generated manifest kind is invalid."
-            )
+            raise IndexBuildError("Generated manifest kind is invalid.")
 
         index_descriptors = {
             clean_text(item.get("filename")): item
             for item in manifest.get("indexes", [])
             if isinstance(item, Mapping)
         }
-
         for path in required:
             if path.name == "manifest.json":
                 continue
-
             descriptor = index_descriptors.get(path.name)
             if descriptor is None:
                 raise IndexBuildError(
                     f"Manifest is missing index descriptor: {path.name}"
                 )
-
-            actual_size = path.stat().st_size
-            expected_size = int(descriptor.get("bytes", -1))
-            if actual_size != expected_size:
-                raise IndexBuildError(
-                    f"Index size mismatch for {path.name}: "
-                    f"manifest={expected_size}, actual={actual_size}."
-                )
-
-            actual_digest = sha256_file(path)
-            expected_digest = clean_text(
-                descriptor.get("sha256")
-            )
-            if actual_digest != expected_digest:
-                raise IndexBuildError(
-                    f"Index checksum mismatch for {path.name}."
-                )
-
-        if self.args.shard:
-            shards_index = load_json_object(
-                self.output / "shards.json"
-            )
-            shard_entries = shards_index.get("shards")
-            if not isinstance(shard_entries, list):
-                raise IndexBuildError(
-                    "shards.json shards must be an array."
-                )
-
-            total_shard_records = 0
-            for entry in shard_entries:
-                if not isinstance(entry, Mapping):
-                    raise IndexBuildError(
-                        "shards.json contains a non-object descriptor."
-                    )
-
-                relative = clean_text(
-                    entry.get("path") or entry.get("filename")
-                )
-                shard_path = (self.output / relative).resolve()
-
-                try:
-                    shard_path.relative_to(self.output.resolve())
-                except ValueError as error:
-                    raise IndexBuildError(
-                        f"Shard path escapes output root: {relative}"
-                    ) from error
-
-                payload = load_json_object(shard_path)
-                expected = int(entry.get("records", -1))
-                if len(payload) != expected:
-                    raise IndexBuildError(
-                        f"Shard count mismatch for {relative}: "
-                        f"manifest={expected}, actual={len(payload)}."
-                    )
-
-                if shard_path.stat().st_size != int(
-                    entry.get("bytes", -1)
-                ):
-                    raise IndexBuildError(
-                        f"Shard size mismatch for {relative}."
-                    )
-
-                if sha256_file(shard_path) != clean_text(
-                    entry.get("sha256")
-                ):
-                    raise IndexBuildError(
-                        f"Shard checksum mismatch for {relative}."
-                    )
-
-                total_shard_records += len(payload)
-
-            if total_shard_records != len(species):
-                raise IndexBuildError(
-                    "Species shard totals do not match species.json."
-                )
+            if path.stat().st_size != int(descriptor.get("bytes", -1)):
+                raise IndexBuildError(f"Index size mismatch for {path.name}.")
+            if sha256_file(path) != clean_text(descriptor.get("sha256")):
+                raise IndexBuildError(f"Index checksum mismatch for {path.name}.")
 
     def build_summary(
         self,
@@ -1719,14 +1829,30 @@ def parse_args(
     )
     parser.add_argument(
         "--shard",
-        action="store_true",
-        help="Write sharded species indexes for lower browser memory usage.",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Write species and taxonomy indexes as GitHub-safe shard sets "
+            "behind stable wrapper JSON files."
+        ),
     )
     parser.add_argument(
         "--shard-size",
         type=int,
         default=DEFAULT_SHARD_SIZE,
-        help="Maximum number of species records per shard.",
+        help="Maximum logical entries per JSON index shard.",
+    )
+    parser.add_argument(
+        "--shard-target-bytes",
+        type=int,
+        default=DEFAULT_SHARD_TARGET_BYTES,
+        help="Approximate target size for each JSON index shard.",
+    )
+    parser.add_argument(
+        "--shard-max-bytes",
+        type=int,
+        default=DEFAULT_SHARD_MAX_BYTES,
+        help="Hard maximum size permitted for any JSON index shard.",
     )
     parser.add_argument(
         "--include-canonical-name",
@@ -1767,6 +1893,12 @@ def parse_args(
 
     if args.shard_size < 1:
         parser.error("--shard-size must be at least 1.")
+    if args.shard_target_bytes < 1:
+        parser.error("--shard-target-bytes must be at least 1.")
+    if args.shard_max_bytes < 1:
+        parser.error("--shard-max-bytes must be at least 1.")
+    if args.shard_target_bytes > args.shard_max_bytes:
+        parser.error("--shard-target-bytes cannot exceed --shard-max-bytes.")
 
     if args.expect_records is not None and args.expect_records < 0:
         parser.error("--expect-records cannot be negative.")
