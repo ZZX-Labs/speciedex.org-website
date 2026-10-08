@@ -93,7 +93,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 709,
+      "records": 711,
       "response_schema_path": "static/tools/providers/schemas/worms.schema.json",
       "role": "marine_taxonomy",
       "runtime_mode": "live_api",
@@ -196,7 +196,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 43124,
+      "records": 43185,
       "response_schema_path": "static/tools/providers/schemas/wikispecies.schema.json",
       "role": "reference_taxonomy",
       "runtime_mode": "live_api",
@@ -249,7 +249,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 669,
+      "records": 671,
       "response_schema_path": "static/tools/providers/schemas/itis.schema.json",
       "role": "taxonomy",
       "runtime_mode": "live_api",
@@ -4105,7 +4105,7 @@
   "source": "static/tools/providers.json",
   "summary": {
     "adapter_conformant": 0,
-    "archive_records": 155012,
+    "archive_records": 155077,
     "available": 7,
     "eligible": 77,
     "enabled": 77,

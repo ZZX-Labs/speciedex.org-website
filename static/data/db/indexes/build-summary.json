@@ -1,11 +1,11 @@
 {
   "duplicate_ids": 0,
-  "duration_seconds": 20.227262,
-  "expected_records": 155012,
-  "generated_at": "2026-10-07T22:14:24Z",
-  "indexed_records": 155012,
+  "duration_seconds": 12.285864,
+  "expected_records": 155077,
+  "generated_at": "2026-10-08T00:16:56Z",
+  "indexed_records": 155077,
   "issues": [],
-  "name_keys": 244347,
+  "name_keys": 244413,
   "providers": 6,
   "schema_version": 3,
   "shard_size": null,
@@ -16,12 +16,12 @@
     "volumes/species-000002.jsonl"
   ],
   "source_mode": "manifest",
-  "source_records": 155012,
+  "source_records": 155077,
   "status": "success",
   "taxonomy_values": {
     "class_name": 327,
     "family": 7316,
-    "genus": 11579,
+    "genus": 11580,
     "kingdom": 9,
     "order_name": 1237,
     "phylum": 121

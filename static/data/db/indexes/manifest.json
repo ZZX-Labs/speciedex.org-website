@@ -1,31 +1,31 @@
 {
-  "duration_seconds": 17.170878,
-  "expected_records": 155012,
-  "generated_at": "2026-10-07T22:14:21Z",
+  "duration_seconds": 10.160238,
+  "expected_records": 155077,
+  "generated_at": "2026-10-08T00:16:54Z",
   "indexes": [
     {
-      "bytes": 90911320,
+      "bytes": 90946859,
       "filename": "species.json",
-      "records": 155012,
-      "sha256": "d21a648da4e20fc57b82c4f259c51a2e1cbd7bd3e60bf23de341cc061995ee20"
+      "records": 155077,
+      "sha256": "96e0276c49e20d96f0d3f007264b76ccdb6c7c58f067450d5c8d26b463a17ae6"
     },
     {
-      "bytes": 29305042,
+      "bytes": 29312551,
       "filename": "names.json",
-      "records": 244347,
-      "sha256": "770eb8173004e6c10a2e6d4a548dcdfea7bdeeec2c68d64ce1a7ee2ef71fca6f"
+      "records": 244413,
+      "sha256": "679ca91e15ed26f573be6caf230493c21a3bcddaf3855068c84cdfce51308a45"
     },
     {
-      "bytes": 12866115,
+      "bytes": 12871510,
       "filename": "providers.json",
       "records": 6,
-      "sha256": "c34e5541e42fe5a4133edd632e7037c7a1ffcf2059bfd28542d2aac5936f848c"
+      "sha256": "b0897d723c23c21989c2ba6fe411dd3bb8be4262e3236c6df2b4404888d92be9"
     },
     {
-      "bytes": 51173247,
+      "bytes": 51174291,
       "filename": "taxonomy.json",
-      "records": 20589,
-      "sha256": "023eea792d4647c86b300d660a89b6652b8b8d53557e19a53a09a169d86c81c8"
+      "records": 20590,
+      "sha256": "fc406059aa9d19c267f58195445ad2f8a498e7084bd3d5efe4c9f059fe73205f"
     }
   ],
   "issues": [],
@@ -50,19 +50,19 @@
   "taxonomy_values": {
     "class_name": 327,
     "family": 7316,
-    "genus": 11579,
+    "genus": 11580,
     "kingdom": 9,
     "order_name": 1237,
     "phylum": 121
   },
   "totals": {
     "duplicate_ids": 0,
-    "name_keys": 244347,
+    "name_keys": 244413,
     "providers": 6,
-    "records": 155012,
+    "records": 155077,
     "shards": 0,
     "skipped_records": 0,
-    "source_records": 155012,
-    "taxonomy_values": 20589
+    "source_records": 155077,
+    "taxonomy_values": 20590
   }
 }

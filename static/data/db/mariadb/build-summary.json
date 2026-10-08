@@ -1,9 +1,9 @@
 {
-  "duration": "00:00:25",
-  "duration_seconds": 24.807379,
+  "duration": "00:00:14",
+  "duration_seconds": 13.855248,
   "exit_code": 0,
-  "expected_records": 155012,
-  "finished_at": "2026-10-07T22:14:04Z",
+  "expected_records": 155077,
+  "finished_at": "2026-10-08T00:16:44Z",
   "interrupted": false,
   "last_error": "",
   "options": {
@@ -23,47 +23,47 @@
   "schema_version": 2,
   "shards": [
     {
-      "bytes": 6432343,
-      "duration_seconds": 2.532493,
+      "bytes": 6432337,
+      "duration_seconds": 1.649073,
       "filename": "speciedex-000001.sql.gz",
-      "finished_at": "2026-10-07T22:13:46Z",
+      "finished_at": "2026-10-08T00:16:33Z",
       "records": 44743,
-      "sha256": "ad147ec6c64201909292e4c71db21996dd5a83bb8b384a95c2998e386a5ccd9b",
+      "sha256": "296c4f4cfe6b7c4b05fd5e97685c038338b903879dedaca83141bb98335c2b3c",
       "shard_id": "000001",
-      "started_at": "2026-10-07T22:13:43Z",
+      "started_at": "2026-10-08T00:16:32Z",
       "verified_rows": null
     },
     {
-      "bytes": 6389660,
-      "duration_seconds": 2.51361,
+      "bytes": 6389665,
+      "duration_seconds": 1.623407,
       "filename": "speciedex-000002.sql.gz",
-      "finished_at": "2026-10-07T22:13:53Z",
+      "finished_at": "2026-10-08T00:16:37Z",
       "records": 43388,
-      "sha256": "a02cd6c5e78d5fd2d8ef700d5f21729f0ef32dee72ed04b870577e879ff24c5b",
+      "sha256": "5abc36786178364418bf923ab08187ddd3950956b7f04efdab091e23faccb83b",
       "shard_id": "000002",
-      "started_at": "2026-10-07T22:13:50Z",
+      "started_at": "2026-10-08T00:16:36Z",
       "verified_rows": null
     },
     {
-      "bytes": 6461551,
-      "duration_seconds": 2.548511,
+      "bytes": 6461544,
+      "duration_seconds": 1.657446,
       "filename": "speciedex-000003.sql.gz",
-      "finished_at": "2026-10-07T22:13:59Z",
+      "finished_at": "2026-10-08T00:16:41Z",
       "records": 44338,
-      "sha256": "2b4a8646627ca0f9c9962eacd19d6dc5fccbc69eb9fe3e36bf928a6c572e2bbb",
+      "sha256": "6de5ba1529a5bec9635950143482d7b0fe550d675674c67bdbfc62e41d78af02",
       "shard_id": "000003",
-      "started_at": "2026-10-07T22:13:57Z",
+      "started_at": "2026-10-08T00:16:40Z",
       "verified_rows": null
     },
     {
-      "bytes": 3089093,
-      "duration_seconds": 1.248209,
+      "bytes": 3097804,
+      "duration_seconds": 0.823779,
       "filename": "speciedex-000004.sql.gz",
-      "finished_at": "2026-10-07T22:14:03Z",
-      "records": 22543,
-      "sha256": "01bd32f3d950d31af4f204c8c8455b0ccfb3a0b73f7bf97c6802321f13a9e6ff",
+      "finished_at": "2026-10-08T00:16:43Z",
+      "records": 22608,
+      "sha256": "b69d7536001e7fb7748062aec3b69c54db4b5e59e89160a53c14d0469987b35a",
       "shard_id": "000004",
-      "started_at": "2026-10-07T22:14:02Z",
+      "started_at": "2026-10-08T00:16:42Z",
       "verified_rows": null
     }
   ],
@@ -72,12 +72,12 @@
     "volumes/species-000002.jsonl"
   ],
   "source_mode": "manifest",
-  "started_at": "2026-10-07T22:13:39Z",
+  "started_at": "2026-10-08T00:16:30Z",
   "status": "success",
   "taxonomy_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy",
   "totals": {
-    "bytes": 22372647,
-    "records": 155012,
+    "bytes": 22381350,
+    "records": 155077,
     "shards": 4
   }
 }

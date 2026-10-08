@@ -1,8 +1,8 @@
 {
   "analyze": false,
   "deduplicate": false,
-  "expected_records": 155012,
-  "generated_at": "2026-10-07T22:13:37Z",
+  "expected_records": 155077,
+  "generated_at": "2026-10-08T00:16:28Z",
   "kind": "sqlite",
   "max_bytes": 94371840,
   "rows_per_shard": 100000,
@@ -39,7 +39,7 @@
         "unranked"
       ],
       "records": 44743,
-      "sha256": "16b4baacde824d854bedf21069406232c9d44176a126ca7244b05c1641c1f36b",
+      "sha256": "e135112a54996768eda64861491c0055f28f6d895213c05985f9f7afa7962ae7",
       "shard_id": "000001"
     },
     {
@@ -69,7 +69,7 @@
         "unranked"
       ],
       "records": 43388,
-      "sha256": "6d50c602444e7be3fe3e4cb58255c202254e74a084d3ea269b02688e48f39f16",
+      "sha256": "d25bd75d55fb16caf1bfc706d2d388e7e61de1e37d6de79f2a511ff6efaeef0e",
       "shard_id": "000002"
     },
     {
@@ -101,17 +101,17 @@
         "variety"
       ],
       "records": 44338,
-      "sha256": "e6e1c2beca03cc407bde8f9fdf0861fdb216b4a0de2bf9c9f2744a28cb561688",
+      "sha256": "d4a052b5b28012a48530c367758a51f3a3fb91e05d78bcb40b08302f8ba5b416",
       "shard_id": "000003"
     },
     {
-      "bytes": 32362496,
+      "bytes": 32452608,
       "filename": "speciedex-000004.sqlite3",
       "first_id": "spx:sha256:5b350ad9315fe93024360f7ac406473e9096cdaf7ba9bb7825a937b2ff8615ac",
       "first_indexed_at": "2026-08-14T04:08:30Z",
       "id": "000004",
-      "last_id": "spx:sha256:334e5f5b6f20ef1468809eb4516ba9211bb6b6d4811f2d8e59bc87449c373a8d",
-      "last_indexed_at": "2026-10-07T22:13:03Z",
+      "last_id": "spx:sha256:de2248cca9bdbb46446d2c285b43416424598c3a4acd3451854f3045a6d2ed8f",
+      "last_indexed_at": "2026-10-08T00:16:05Z",
       "path": "speciedex-000004.sqlite3",
       "providers": [
         "gbif",
@@ -134,8 +134,8 @@
         "superorder",
         "unranked"
       ],
-      "records": 22543,
-      "sha256": "e83b2c20c0bc83cf82b29e1fa41c5ef06074b3a2c0fbd5853d71ad29f0cbad1b",
+      "records": 22608,
+      "sha256": "3f9e877bd64b1c2d20eadab2dfcb0f19de8795867a624ce49f7f1972c25f9b89",
       "shard_id": "000004"
     }
   ],
@@ -148,8 +148,8 @@
   "strict": false,
   "target_bytes": 75497472,
   "totals": {
-    "bytes": 251461632,
-    "records": 155012,
+    "bytes": 251551744,
+    "records": 155077,
     "shards": 4
   },
   "vacuum": false

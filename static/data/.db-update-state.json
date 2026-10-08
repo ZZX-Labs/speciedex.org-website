@@ -12,13 +12,13 @@
   ],
   "current_step": "",
   "db_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/db",
-  "finished_at": "2026-10-07T22:15:39Z",
+  "finished_at": "2026-10-08T00:17:30Z",
   "last_error": "",
   "published": true,
   "rolled_back": false,
   "schema_version": 3,
   "staging_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging",
-  "started_at": "2026-10-07T22:13:14Z",
+  "started_at": "2026-10-08T00:16:14Z",
   "status": "success",
   "taxonomy_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy"
 }

@@ -1,8 +1,8 @@
 {
   "compression": "gzip",
   "deduplicate": false,
-  "expected_records": 155012,
-  "generated_at": "2026-10-07T22:14:03Z",
+  "expected_records": 155077,
+  "generated_at": "2026-10-08T00:16:43Z",
   "insert_batch_size": 500,
   "kind": "mariadb-logical",
   "max_bytes": 94371840,
@@ -11,7 +11,7 @@
   "schema_version": 2,
   "shards": [
     {
-      "bytes": 6432343,
+      "bytes": 6432337,
       "filename": "speciedex-000001.sql.gz",
       "first_id": "spx:sha256:51b4e75ef19da8f6ca5f0788250e6311a93da7a13bd116e456911526cf258f21",
       "first_indexed_at": "2026-07-19T00:07:05Z",
@@ -41,11 +41,11 @@
         "unranked"
       ],
       "records": 44743,
-      "sha256": "ad147ec6c64201909292e4c71db21996dd5a83bb8b384a95c2998e386a5ccd9b",
+      "sha256": "296c4f4cfe6b7c4b05fd5e97685c038338b903879dedaca83141bb98335c2b3c",
       "shard_id": "000001"
     },
     {
-      "bytes": 6389660,
+      "bytes": 6389665,
       "filename": "speciedex-000002.sql.gz",
       "first_id": "spx:sha256:cd3fc073d4a1d75a2b008b41f19e1ccbb153d0a70b4036aab8abcadd6c0c5cb4",
       "first_indexed_at": "2026-07-23T22:53:09Z",
@@ -71,11 +71,11 @@
         "unranked"
       ],
       "records": 43388,
-      "sha256": "a02cd6c5e78d5fd2d8ef700d5f21729f0ef32dee72ed04b870577e879ff24c5b",
+      "sha256": "5abc36786178364418bf923ab08187ddd3950956b7f04efdab091e23faccb83b",
       "shard_id": "000002"
     },
     {
-      "bytes": 6461551,
+      "bytes": 6461544,
       "filename": "speciedex-000003.sql.gz",
       "first_id": "spx:sha256:2efb3b38fdd502403cbb228d39e6d60f8f536901067f96670f5cabe39806a67a",
       "first_indexed_at": "2026-07-28T04:09:08Z",
@@ -103,17 +103,17 @@
         "variety"
       ],
       "records": 44338,
-      "sha256": "2b4a8646627ca0f9c9962eacd19d6dc5fccbc69eb9fe3e36bf928a6c572e2bbb",
+      "sha256": "6de5ba1529a5bec9635950143482d7b0fe550d675674c67bdbfc62e41d78af02",
       "shard_id": "000003"
     },
     {
-      "bytes": 3089093,
+      "bytes": 3097804,
       "filename": "speciedex-000004.sql.gz",
       "first_id": "spx:sha256:5b350ad9315fe93024360f7ac406473e9096cdaf7ba9bb7825a937b2ff8615ac",
       "first_indexed_at": "2026-08-14T04:08:30Z",
       "id": "000004",
-      "last_id": "spx:sha256:334e5f5b6f20ef1468809eb4516ba9211bb6b6d4811f2d8e59bc87449c373a8d",
-      "last_indexed_at": "2026-10-07T22:13:03Z",
+      "last_id": "spx:sha256:de2248cca9bdbb46446d2c285b43416424598c3a4acd3451854f3045a6d2ed8f",
+      "last_indexed_at": "2026-10-08T00:16:05Z",
       "path": "speciedex-000004.sql.gz",
       "providers": [
         "gbif",
@@ -136,8 +136,8 @@
         "superorder",
         "unranked"
       ],
-      "records": 22543,
-      "sha256": "01bd32f3d950d31af4f204c8c8455b0ccfb3a0b73f7bf97c6802321f13a9e6ff",
+      "records": 22608,
+      "sha256": "b69d7536001e7fb7748062aec3b69c54db4b5e59e89160a53c14d0469987b35a",
       "shard_id": "000004"
     }
   ],
@@ -150,8 +150,8 @@
   "strict": false,
   "target_bytes": 75497472,
   "totals": {
-    "bytes": 22372647,
-    "records": 155012,
+    "bytes": 22381350,
+    "records": 155077,
     "shards": 4
   }
 }

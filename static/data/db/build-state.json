@@ -2,66 +2,66 @@
   "complete": true,
   "components": {
     "indexes": {
-      "generated_at": "2026-10-07T22:14:21Z",
-      "records": 155012,
+      "generated_at": "2026-10-08T00:16:54Z",
+      "records": 155077,
       "schema_version": 3
     },
     "mariadb": {
-      "generated_at": "2026-10-07T22:14:03Z",
-      "records": 155012,
+      "generated_at": "2026-10-08T00:16:43Z",
+      "records": 155077,
       "schema_version": 2
     },
     "sqlite": {
-      "generated_at": "2026-10-07T22:13:37Z",
-      "records": 155012,
+      "generated_at": "2026-10-08T00:16:28Z",
+      "records": 155077,
       "schema_version": 2
     },
     "updates": {
-      "generated_at": "2026-10-07T22:14:41Z",
-      "records": 155012,
+      "generated_at": "2026-10-08T00:17:03Z",
+      "records": 155077,
       "schema_version": 3
     }
   },
   "database_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging",
   "duration": "00:00:00",
-  "duration_seconds": 0.388332,
+  "duration_seconds": 0.271953,
   "files": {
-    "bytes": 517760989,
-    "count": 31
+    "bytes": 488115983,
+    "count": 33
   },
-  "generated_at": "2026-10-07T22:15:38.580281+00:00",
+  "generated_at": "2026-10-08T00:17:30.131514+00:00",
   "indexes": {
     "duplicate_ids": 0,
-    "name_keys": 244347,
+    "name_keys": 244413,
     "providers": 6,
-    "records": 155012,
+    "records": 155077,
     "shards": 0,
     "skipped_records": 0,
-    "source_records": 155012,
-    "taxonomy_values": 20589
+    "source_records": 155077,
+    "taxonomy_values": 20590
   },
   "mariadb": {
-    "bytes": 22372647,
-    "records": 155012,
+    "bytes": 22381350,
+    "records": 155077,
     "shards": 4
   },
   "parity": {
     "comparable": true,
     "equal": true,
     "index_equal": true,
-    "index_records": 155012,
-    "mariadb_records": 155012,
-    "sqlite_records": 155012
+    "index_records": 155077,
+    "mariadb_records": 155077,
+    "sqlite_records": 155077
   },
   "schema_version": 2,
   "sqlite": {
-    "bytes": 251461632,
-    "records": 155012,
+    "bytes": 251551744,
+    "records": 155077,
     "shards": 4
   },
   "updates": {
-    "additions_or_changes": 155012,
+    "additions_or_changes": 65,
     "deletions": 0,
-    "records": 155012
+    "records": 155077
   }
 }
