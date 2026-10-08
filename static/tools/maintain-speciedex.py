@@ -23,7 +23,7 @@ def cycle(root: Path, *, ingest=True, feeds: Path|None=None, rebuild=True):
         if feeds:status['steps']['feeds']=run('static/tools/sync-provider-feeds.py','--config',str(feeds.resolve()))
         if ingest:status['steps']['ingestion']=run('static/tools/stat-grabber.py','scan','--all-providers','--batch-size','500','--timeout','30','--retries','3')
         if run('static/tools/stat-grabber.py','verify'):raise RuntimeError('Canonical verification failed')
-        if rebuild and run('static/tools/database/update-databases.py','--include-canonical-name','--include-taxonomy','--verify-parity-arg=--deep'):raise RuntimeError('Database publication failed; previous products retained')
+        if rebuild and run('static/tools/database/update-databases.py','--include-canonical-name','--include-taxonomy','--shard-indexes','--rows-per-shard','30000','--target-bytes',str(40*1024*1024),'--max-bytes',str(48*1024*1024),'--verify-parity-arg=--deep'):raise RuntimeError('Database publication failed; previous products retained')
         if run('static/tools/terminal-api.py','--generate-static'):raise RuntimeError('API snapshot build failed')
         registry=json.loads((root/'static/tools/providers.json').read_text())['providers']
         providers=[]
