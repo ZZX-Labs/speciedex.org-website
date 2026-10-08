@@ -8,6 +8,10 @@
     },
     {
       "method": "GET",
+      "path": "/auth/status"
+    },
+    {
+      "method": "GET",
       "path": "/benchmark"
     },
     {
@@ -121,6 +125,18 @@
     {
       "method": "GET",
       "path": "/stream.json"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/admin/challenge"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/admin/verify"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/logout"
     },
     {
       "method": "POST",

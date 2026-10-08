@@ -8,7 +8,7 @@
     },
     {
       "path": "api/speciedex/v1/index.json",
-      "sha256": "8a2e094b9142b676ce88205b99a8735b37e5a583e82d98f79c7360fb508db40d",
+      "sha256": "9558c228765dd4e6223e0b297e5488ea6b1351ebe8d7e10cc4aa391a47247e06",
       "size": 864
     },
     {
@@ -78,8 +78,8 @@
     },
     {
       "path": "api/speciedex/v1/routes.json",
-      "sha256": "f76b0606bc714920fccd20c76f56a8001f2594d41cf5d86f23c1014412835356",
-      "size": 2513
+      "sha256": "16ca5fdc51203d4ecee3563eb4daacf334e0158fd2d681187afb11496ae178fa",
+      "size": 2791
     },
     {
       "path": "api/speciedex/v1/stats.json",
@@ -92,6 +92,6 @@
       "size": 92297
     }
   ],
-  "generated_at": "2026-10-08T05:08:33.099749+00:00",
+  "generated_at": "2026-10-08T06:24:50.581960+00:00",
   "schema": "speciedex-terminal-api-manifest"
 }
