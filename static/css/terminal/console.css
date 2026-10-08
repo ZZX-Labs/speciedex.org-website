@@ -864,3 +864,83 @@ Licensed under the MIT License.
 .terminal-input:focus {
     background: rgba(192,214,116,.015);
 }
+
+/* =====================================================================
+   Command composer spacing
+   ===================================================================== */
+
+.terminal-command-form {
+    background:
+        linear-gradient(
+            180deg,
+            rgba(192, 214, 116, 0.025),
+            rgba(192, 214, 116, 0.01)
+        ),
+        var(--terminal-surface-raised, #10150d);
+    border-bottom: 1px solid rgba(192, 214, 116, 0.12);
+    padding: .75rem .9rem .9rem;
+}
+
+.terminal-command-line {
+    align-items: stretch;
+    gap: .5rem;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    padding: 0;
+}
+
+.terminal-prompt-row {
+    align-items: center;
+    display: flex;
+    min-width: 0;
+    padding: 0 .15rem;
+}
+
+.terminal-search-row {
+    align-items: center;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-width: 0;
+}
+
+.terminal-search-row .terminal-input {
+    background: rgba(0, 0, 0, 0.24);
+    border: 1px solid var(--terminal-border, rgba(192, 214, 116, 0.26));
+    border-radius: var(--terminal-radius-small, .25rem);
+    min-height: 2.65rem;
+    padding: .6rem .75rem;
+}
+
+.terminal-search-row .terminal-input:focus {
+    border-color: var(--terminal-border-strong, rgba(192, 214, 116, 0.58));
+    box-shadow: 0 0 0 2px rgba(192, 214, 116, 0.07);
+}
+
+.terminal-search-row .terminal-submit {
+    min-height: 2.65rem;
+    min-width: 4.75rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.terminal-footer {
+    gap: .75rem 1.25rem;
+    padding: .72rem 1rem;
+}
+
+@media (max-width: 40rem) {
+    .terminal-command-form {
+        padding: .65rem .7rem .75rem;
+    }
+
+    .terminal-search-row {
+        gap: .65rem;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .terminal-search-row .terminal-submit {
+        justify-self: stretch;
+        width: 100%;
+    }
+}
