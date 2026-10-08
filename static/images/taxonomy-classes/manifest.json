@@ -1,126 +1,185 @@
 {
-  "icons": {
-    "algae": {
-      "color": "#3f9d7a",
-      "label": "Algae",
-      "path": "/static/images/taxonomy-classes/algae.png"
-    },
-    "amphibian": {
-      "color": "#55a86c",
-      "label": "Amphibian",
-      "path": "/static/images/taxonomy-classes/amphibian.png"
-    },
-    "arachnid": {
-      "color": "#805d9b",
-      "label": "Arachnid",
-      "path": "/static/images/taxonomy-classes/arachnid.png"
-    },
-    "archaea": {
-      "color": "#8b5f92",
-      "label": "Archaea",
-      "path": "/static/images/taxonomy-classes/archaea.png"
-    },
-    "bacteria": {
-      "color": "#8f68b0",
-      "label": "Bacteria",
-      "path": "/static/images/taxonomy-classes/bacteria.png"
-    },
-    "bird": {
-      "color": "#4f8fb8",
-      "label": "Bird",
-      "path": "/static/images/taxonomy-classes/bird.png"
-    },
-    "cnidarian": {
-      "color": "#d55c88",
-      "label": "Cnidarian",
-      "path": "/static/images/taxonomy-classes/cnidarian.png"
-    },
-    "coral": {
-      "color": "#e06f63",
-      "label": "Coral",
-      "path": "/static/images/taxonomy-classes/coral.png"
-    },
-    "crustacean": {
-      "color": "#d26f59",
-      "label": "Crustacean",
-      "path": "/static/images/taxonomy-classes/crustacean.png"
-    },
-    "echinoderm": {
-      "color": "#d9806a",
-      "label": "Echinoderm",
-      "path": "/static/images/taxonomy-classes/echinoderm.png"
-    },
-    "fish": {
-      "color": "#398fa3",
-      "label": "Fish",
-      "path": "/static/images/taxonomy-classes/fish.png"
-    },
-    "fungi": {
-      "color": "#a26a3d",
-      "label": "Fungi",
-      "path": "/static/images/taxonomy-classes/fungi.png"
-    },
-    "insect": {
-      "color": "#c6a23a",
-      "label": "Insect",
-      "path": "/static/images/taxonomy-classes/insect.png"
-    },
-    "mammal": {
-      "color": "#9a6c55",
-      "label": "Mammal",
-      "path": "/static/images/taxonomy-classes/mammal.png"
-    },
-    "mollusk": {
-      "color": "#c98b73",
-      "label": "Mollusk",
-      "path": "/static/images/taxonomy-classes/mollusk.png"
-    },
-    "other": {
-      "color": "#6f776f",
-      "label": "Other",
-      "path": "/static/images/taxonomy-classes/other.png"
-    },
-    "plankton": {
-      "color": "#4b9bb0",
-      "label": "Plankton",
-      "path": "/static/images/taxonomy-classes/plankton.png"
-    },
-    "plant": {
-      "color": "#5f9f3a",
+  "count": 25,
+  "format": "png",
+  "icons": [
+    {
+      "height": 200,
+      "id": "plant",
       "label": "Plant",
-      "path": "/static/images/taxonomy-classes/plant.png"
+      "path": "/static/images/taxonomy-classes/plant.png",
+      "width": 200
     },
-    "pollen": {
-      "color": "#d5a630",
-      "label": "Pollen",
-      "path": "/static/images/taxonomy-classes/pollen.png"
+    {
+      "height": 200,
+      "id": "fungi",
+      "label": "Fungi",
+      "path": "/static/images/taxonomy-classes/fungi.png",
+      "width": 200
     },
-    "protist": {
-      "color": "#6d90b8",
-      "label": "Protist",
-      "path": "/static/images/taxonomy-classes/protist.png"
+    {
+      "height": 200,
+      "id": "bird",
+      "label": "Bird",
+      "path": "/static/images/taxonomy-classes/bird.png",
+      "width": 200
     },
-    "reptile": {
-      "color": "#73964a",
+    {
+      "height": 200,
+      "id": "fish",
+      "label": "Fish",
+      "path": "/static/images/taxonomy-classes/fish.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "mammal",
+      "label": "Mammal",
+      "path": "/static/images/taxonomy-classes/mammal.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "reptile",
       "label": "Reptile",
-      "path": "/static/images/taxonomy-classes/reptile.png"
+      "path": "/static/images/taxonomy-classes/reptile.png",
+      "width": 200
     },
-    "sponge": {
-      "color": "#d0a14e",
-      "label": "Sponge",
-      "path": "/static/images/taxonomy-classes/sponge.png"
+    {
+      "height": 200,
+      "id": "amphibian",
+      "label": "Amphibian",
+      "path": "/static/images/taxonomy-classes/amphibian.png",
+      "width": 200
     },
-    "virus": {
-      "color": "#b64c5d",
-      "label": "Virus",
-      "path": "/static/images/taxonomy-classes/virus.png"
+    {
+      "height": 200,
+      "id": "crustacean",
+      "label": "Crustacean",
+      "path": "/static/images/taxonomy-classes/crustacean.png",
+      "width": 200
     },
-    "worm": {
-      "color": "#b57e5b",
+    {
+      "height": 200,
+      "id": "insect",
+      "label": "Insect",
+      "path": "/static/images/taxonomy-classes/insect.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "arachnid",
+      "label": "Arachnid",
+      "path": "/static/images/taxonomy-classes/arachnid.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "mollusk",
+      "label": "Mollusk",
+      "path": "/static/images/taxonomy-classes/mollusk.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "worm",
       "label": "Worm",
-      "path": "/static/images/taxonomy-classes/worm.png"
+      "path": "/static/images/taxonomy-classes/worm.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "echinoderm",
+      "label": "Echinoderm",
+      "path": "/static/images/taxonomy-classes/echinoderm.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "cnidarian",
+      "label": "Cnidarian",
+      "path": "/static/images/taxonomy-classes/cnidarian.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "sponge",
+      "label": "Sponge",
+      "path": "/static/images/taxonomy-classes/sponge.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "algae",
+      "label": "Algae",
+      "path": "/static/images/taxonomy-classes/algae.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "protist",
+      "label": "Protist",
+      "path": "/static/images/taxonomy-classes/protist.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "bacteria",
+      "label": "Bacteria",
+      "path": "/static/images/taxonomy-classes/bacteria.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "archaea",
+      "label": "Archaea",
+      "path": "/static/images/taxonomy-classes/archaea.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "virus",
+      "label": "Virus",
+      "path": "/static/images/taxonomy-classes/virus.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "pollen",
+      "label": "Pollen",
+      "path": "/static/images/taxonomy-classes/pollen.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "coral",
+      "label": "Coral",
+      "path": "/static/images/taxonomy-classes/coral.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "plankton",
+      "label": "Plankton",
+      "path": "/static/images/taxonomy-classes/plankton.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "fossil",
+      "label": "Fossil / Extinct",
+      "path": "/static/images/taxonomy-classes/fossil.png",
+      "width": 200
+    },
+    {
+      "height": 200,
+      "id": "other",
+      "label": "Other",
+      "path": "/static/images/taxonomy-classes/other.png",
+      "width": 200
     }
-  },
-  "schema_version": 1,
-  "size": 32
+  ],
+  "kind": "speciedex-taxonomy-class-icons",
+  "pixel_style": "retro handheld creature sprite",
+  "schema_version": 2,
+  "transparent_background": true
 }
