@@ -163,9 +163,9 @@ def default_values() -> tuple[int, int, int]:
         )
     except RuntimeError:
         return (
-            100_000,
-            72 * 1024 * 1024,
-            90 * 1024 * 1024,
+            30_000,
+            40 * 1024 * 1024,
+            48 * 1024 * 1024,
         )
 
 
