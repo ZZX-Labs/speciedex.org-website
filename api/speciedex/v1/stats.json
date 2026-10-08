@@ -3,13 +3,13 @@
   "database_exists": true,
   "manifest": {
     "active_volume": "volumes/species-000002.jsonl",
-    "generated_at": "2026-10-08T04:17:04Z",
+    "generated_at": "2026-10-08T04:25:59Z",
     "maximum_volume_bytes": 94371840,
     "record_format": "jsonl",
     "schema_version": 1,
     "target_volume_bytes": 50331648,
-    "total_primary_records": 155169,
-    "total_revisions": 32140,
+    "total_primary_records": 155236,
+    "total_revisions": 32407,
     "volumes": [
       {
         "created_at": "2026-07-19T00:07:05Z",
@@ -23,11 +23,11 @@
       {
         "created_at": "2026-07-27T17:18:16Z",
         "file": "volumes/species-000002.jsonl",
-        "record_count": 71598,
+        "record_count": 71665,
         "sealed": false,
         "sealed_at": null,
         "sha256": null,
-        "size_bytes": 41715005
+        "size_bytes": 41751040
       }
     ]
   },
@@ -134,15 +134,15 @@
     "count_method": "local-deduplicated-append-only-canonical-corpus",
     "families": 7177,
     "family": 7177,
-    "genera": 12670,
+    "genera": 12672,
     "generator": {
       "name": "Speciedex Stat Grabber",
       "version": "3.3.0"
     },
-    "genus": 12670,
+    "genus": 12672,
     "kingdom": 10,
     "kingdoms": 10,
-    "last_updated": "2026-10-08T04:17:06Z",
+    "last_updated": "2026-10-08T04:26:02Z",
     "order": 1225,
     "orders": 1225,
     "phyla": 121,
@@ -153,21 +153,21 @@
       "family": 7216,
       "form": 13,
       "forma": 1,
-      "genus": 12109,
+      "genus": 12110,
       "infraorder": 2,
       "kingdom": 11,
       "order": 841,
       "phylum": 51,
-      "species": 98161,
-      "subspecies": 3300,
+      "species": 98202,
+      "subspecies": 3302,
       "tribe": 2,
-      "unranked": 8120,
+      "unranked": 8143,
       "variety": 1
     },
-    "records_archived": 155169,
-    "source_assertions": 155183,
-    "species": 98161,
-    "subspecies": 3300,
+    "records_archived": 155236,
+    "source_assertions": 155250,
+    "species": 98202,
+    "subspecies": 3302,
     "synonyms": 190,
     "unresolved_conflicts": 4,
     "volumes": 2

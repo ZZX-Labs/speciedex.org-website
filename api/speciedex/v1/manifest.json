@@ -8,32 +8,32 @@
     },
     {
       "path": "api/speciedex/v1/index.json",
-      "sha256": "baf77961d8bd97ba5bc0eb39d1a3decc8619e32ee75bee144b56627b38a24cfd",
+      "sha256": "8a2e094b9142b676ce88205b99a8735b37e5a583e82d98f79c7360fb508db40d",
       "size": 864
     },
     {
       "path": "api/speciedex/v1/providers/assertions-0001.json",
-      "sha256": "c00c5bf6c86d52e061aa85b64b27e0c2c4bf169911169aa6762722a04309dff3",
+      "sha256": "e23d1109105e8259fddfbb6ea5ad407dc1a405fb8dd1c91fd9fbb6daeed61fdd",
       "size": 19858269
     },
     {
       "path": "api/speciedex/v1/providers/assertions-0002.json",
-      "sha256": "4013b90a3efddb742424ae12ba4f32d4f917294bc56945d781850f6958b43d9f",
+      "sha256": "dcf0b85014add1939fe85f5d02ae7cf46f964deb4c141d979598858b55926aca",
       "size": 19999100
     },
     {
       "path": "api/speciedex/v1/providers/assertions-0003.json",
-      "sha256": "b80c7d035d50c3eb3ec27f50feef7492c0a864a790fc40b4931c7275788662d1",
+      "sha256": "11dfa993aab68978bf429a1f29fe93aafa7417465eefd8b77430db011c72c848",
       "size": 19950946
     },
     {
       "path": "api/speciedex/v1/providers/assertions-0004.json",
-      "sha256": "838de46968ab438a3ec99e417d0cea559d58e251bb219792547b6a43e1389751",
+      "sha256": "809b0b92892a7b63f2699d1938e3b3e1d04ec0084ca2db381d66a62784782d64",
       "size": 20057762
     },
     {
       "path": "api/speciedex/v1/providers/assertions.json",
-      "sha256": "1f4d34b0e91a6487b52f978fb5ca7b97f295383dcfc040dab27a8833d7d9f6b6",
+      "sha256": "9767fbd9406fe8554cc26ea791fe6314d3651da360d6c788bf3b795ec3d7d36a",
       "size": 1345
     },
     {
@@ -43,18 +43,18 @@
     },
     {
       "path": "api/speciedex/v1/providers/eligible.json",
-      "sha256": "a98e433ad76e0dfc5b1db58663b44d0f21e1d7aa8ecfdb86bf3d831565c0510d",
+      "sha256": "0395446bb12e26220c1f805e336edcc5cc74e8a556a95cb30a0080ff33355de5",
       "size": 438732
     },
     {
       "path": "api/speciedex/v1/providers/enabled.json",
-      "sha256": "432de6ede9343b6ce30d513cda3df019627fd780bc0b503ff2966260bdc53cc8",
+      "sha256": "ee6ea3fc840f673f8a4ef8703a1c51b8f9197539192feed15e6fbb4d85635fe1",
       "size": 401465
     },
     {
       "path": "api/speciedex/v1/providers/errors.json",
-      "sha256": "1a169fe658bf24c70a66b9446371400569661f8e7bf317966c40cb1343b7f1bf",
-      "size": 68639
+      "sha256": "efa3d3ff8448cc17abcaa8b94e67e64ffb7865c3008d4028868babd4d255f5d3",
+      "size": 68069
     },
     {
       "path": "api/speciedex/v1/providers/latency.json",
@@ -68,12 +68,12 @@
     },
     {
       "path": "api/speciedex/v1/providers/statistics.json",
-      "sha256": "e1e687d28ad6fb984e6054af3b474b8100a388c2d1d9b4767625fef9ac8b5fd7",
-      "size": 99523
+      "sha256": "9f5e6aea4a2e803ba8365f8ae9650e535306f724d71bedfdc3f67a3b6764609e",
+      "size": 99479
     },
     {
       "path": "api/speciedex/v1/providers.json",
-      "sha256": "3da1faec1af39006eb65de0f1141a022887c5fc3fc393c243a773d30a5c8d5f3",
+      "sha256": "2f182f619e468bd6df2b5dc0c2a7b46b14a266a358b6110db9482452a8ac4b66",
       "size": 134147
     },
     {
@@ -83,7 +83,7 @@
     },
     {
       "path": "api/speciedex/v1/stats.json",
-      "sha256": "cdbd5c78dfee22307c05e907e004e3389579a4e7c56f2279bf9c7ae49a789ff2",
+      "sha256": "6bf20f9eee0361522aec32ba49025d94565507c42fa31322a780443d4b2df5cf",
       "size": 3596
     },
     {
@@ -92,6 +92,6 @@
       "size": 92297
     }
   ],
-  "generated_at": "2026-10-08T04:23:27.310187+00:00",
+  "generated_at": "2026-10-08T05:08:33.099749+00:00",
   "schema": "speciedex-terminal-api-manifest"
 }

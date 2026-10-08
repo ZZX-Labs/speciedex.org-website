@@ -1,16 +1,6 @@
 {
-  "count": 71,
+  "count": 70,
   "errors": [
-    {
-      "error": "HTTP 400 from api.gbif.org",
-      "id": "gbif:provider-run",
-      "message": "HTTP 400 from api.gbif.org",
-      "provider": "gbif",
-      "provider_id": "gbif",
-      "source": "statistics-sources.json",
-      "stage": "ingest",
-      "status": "error"
-    },
     {
       "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/wikidata.jsonl",
       "id": "wikidata:skipped",
@@ -716,16 +706,6 @@
   "offset": 0,
   "records": [
     {
-      "error": "HTTP 400 from api.gbif.org",
-      "id": "gbif:provider-run",
-      "message": "HTTP 400 from api.gbif.org",
-      "provider": "gbif",
-      "provider_id": "gbif",
-      "source": "statistics-sources.json",
-      "stage": "ingest",
-      "status": "error"
-    },
-    {
       "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/wikidata.jsonl",
       "id": "wikidata:skipped",
       "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/wikidata.jsonl",
@@ -1426,5 +1406,5 @@
       "status": "skipped"
     }
   ],
-  "total": 71
+  "total": 70
 }

@@ -89,7 +89,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 43273,
+      "records": 43338,
       "response_schema_path": "static/tools/providers/schemas/wikispecies.schema.json",
       "role": "reference_taxonomy",
       "runtime_mode": "live_api",
@@ -194,7 +194,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 673,
+      "records": 674,
       "response_schema_path": "static/tools/providers/schemas/itis.schema.json",
       "role": "taxonomy",
       "runtime_mode": "live_api",
@@ -248,7 +248,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 713,
+      "records": 714,
       "response_schema_path": "static/tools/providers/schemas/worms.schema.json",
       "role": "marine_taxonomy",
       "runtime_mode": "live_api",
@@ -4190,7 +4190,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 43273,
+      "records": 43338,
       "response_schema_path": "static/tools/providers/schemas/wikispecies.schema.json",
       "role": "reference_taxonomy",
       "runtime_mode": "live_api",
@@ -4295,7 +4295,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 673,
+      "records": 674,
       "response_schema_path": "static/tools/providers/schemas/itis.schema.json",
       "role": "taxonomy",
       "runtime_mode": "live_api",
@@ -4349,7 +4349,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 713,
+      "records": 714,
       "response_schema_path": "static/tools/providers/schemas/worms.schema.json",
       "role": "marine_taxonomy",
       "runtime_mode": "live_api",
@@ -8289,7 +8289,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 43273,
+      "records": 43338,
       "response_schema_path": "static/tools/providers/schemas/wikispecies.schema.json",
       "role": "reference_taxonomy",
       "runtime_mode": "live_api",
@@ -8394,7 +8394,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 673,
+      "records": 674,
       "response_schema_path": "static/tools/providers/schemas/itis.schema.json",
       "role": "taxonomy",
       "runtime_mode": "live_api",
@@ -8448,7 +8448,7 @@
         "https"
       ],
       "rate_limit_per_second": 2.0,
-      "records": 713,
+      "records": 714,
       "response_schema_path": "static/tools/providers/schemas/worms.schema.json",
       "role": "marine_taxonomy",
       "runtime_mode": "live_api",
