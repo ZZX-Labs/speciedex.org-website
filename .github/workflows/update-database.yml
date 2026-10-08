@@ -28,6 +28,11 @@ on:
         required: false
         default: ""
         type: string
+      fresh_rebuild:
+        description: Purge generated database products before rebuilding from canonical taxonomy data
+        required: false
+        default: false
+        type: boolean
 
   workflow_call:
     inputs:
@@ -46,6 +51,11 @@ on:
         required: false
         default: ""
         type: string
+      fresh_rebuild:
+        description: Purge generated database products before rebuilding from canonical taxonomy data
+        required: false
+        default: false
+        type: boolean
     outputs:
       request_id:
         description: Normalized request identifier
@@ -181,6 +191,16 @@ jobs:
 
           python -m py_compile "$DATABASE_TOOL_ROOT"/*.py
 
+      - name: Purge generated database products for a fresh rebuild
+        if: ${{ inputs.fresh_rebuild == true }}
+        run: |
+          set -Eeuo pipefail
+
+          printf '%s\n' \
+            "Fresh rebuild requested; preserving canonical taxonomy data at $TAXONOMY_ROOT."
+          rm -rf "$DATABASE_ROOT"
+          mkdir -p "$DATABASE_ROOT"
+
       - name: Build and atomically publish database products
         run: |
           set -Eeuo pipefail
@@ -192,6 +212,9 @@ jobs:
             --verify \
             --publish \
             --strict-records \
+            --include-canonical-name \
+            --include-taxonomy \
+            --shard-indexes \
             --verbose
 
       - name: Generate matching terminal API snapshots
