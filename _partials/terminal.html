@@ -242,22 +242,49 @@ Licensed under the MIT License.
                         </div>
                     </header>
 
-                    <div class="terminal-splash-columns" aria-hidden="true">
-                        <span>Scientific Name</span>
-                        <span>Common Name</span>
-                        <span>Speciedex ID</span>
-                    </div>
-
                     <div
-                        class="terminal-splash-list"
-                        role="log"
-                        aria-live="polite"
-                        aria-relevant="additions"
-                        data-terminal-splash-list
+                        class="terminal-splash-reader"
+                        role="region"
+                        aria-label="Live species library reader"
+                        tabindex="0"
+                        data-terminal-splash-reader
                     >
-                        <div class="terminal-splash-empty">
-                            Awaiting live species records from providers, scans,
-                            search, imports, and archive reconciliation.
+                        <div class="terminal-splash-columns" aria-hidden="true">
+                            <span>Scientific Name</span>
+                            <span>Common Names</span>
+                            <span>Canonical Name</span>
+                            <span>Authorship</span>
+                            <span>Rank</span>
+                            <span>Status</span>
+                            <span>Provider / Source</span>
+                            <span>Provider ID</span>
+                            <span>Speciedex ID</span>
+                            <span>Date Added</span>
+                            <span>Last Seen</span>
+                            <span>Domain</span>
+                            <span>Kingdom</span>
+                            <span>Phylum</span>
+                            <span>Class</span>
+                            <span>Order</span>
+                            <span>Family</span>
+                            <span>Genus</span>
+                            <span>Species</span>
+                            <span>Subspecies</span>
+                            <span>Taxonomic Lineage</span>
+                            <span>Source URL</span>
+                        </div>
+
+                        <div
+                            class="terminal-splash-list"
+                            role="log"
+                            aria-live="polite"
+                            aria-relevant="additions"
+                            data-terminal-splash-list
+                        >
+                            <div class="terminal-splash-empty">
+                                Awaiting live species records from providers, scans,
+                                search, imports, and archive reconciliation.
+                            </div>
                         </div>
                     </div>
 
@@ -670,7 +697,26 @@ Licensed under the MIT License.
             >
                 <span data-terminal-splash-scientific-name></span>
                 <span data-terminal-splash-common-name></span>
+                <span data-terminal-splash-canonical-name></span>
+                <span data-terminal-splash-authorship></span>
+                <span data-terminal-splash-rank></span>
+                <span data-terminal-splash-status></span>
+                <span data-terminal-splash-provider></span>
+                <span data-terminal-splash-provider-id></span>
                 <span data-terminal-splash-speciedex-id></span>
+                <span data-terminal-splash-date-added></span>
+                <span data-terminal-splash-last-seen></span>
+                <span data-terminal-splash-domain></span>
+                <span data-terminal-splash-kingdom></span>
+                <span data-terminal-splash-phylum></span>
+                <span data-terminal-splash-class></span>
+                <span data-terminal-splash-order></span>
+                <span data-terminal-splash-family></span>
+                <span data-terminal-splash-genus></span>
+                <span data-terminal-splash-species></span>
+                <span data-terminal-splash-subspecies></span>
+                <span data-terminal-splash-lineage></span>
+                <span data-terminal-splash-source-url></span>
             </div>
         </template>
 
