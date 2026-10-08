@@ -44,7 +44,7 @@ Licensed under the MIT License.
     data-terminal-persist-history="true"
     data-terminal-max-lines="500"
     data-terminal-splash-capacity="128"
-    data-terminal-splash-visible="12"
+    data-terminal-splash-visible="64"
     data-terminal-splash-interval="900"
     data-terminal-splash-matrix-mode="zmatrix"
     data-terminal-ready="false"
@@ -331,6 +331,17 @@ Licensed under the MIT License.
                             </button>
 
                             <button
+                                class="terminal-splash-control terminal-splash-settings"
+                                type="button"
+                                title="Open terminal settings"
+                                aria-label="Open Speciedex terminal settings"
+                                data-terminal-settings-button
+                            >
+                                <span class="terminal-settings-gear" aria-hidden="true"></span>
+                                <span>Settings</span>
+                            </button>
+
+                            <button
                                 class="terminal-splash-control"
                                 type="button"
                                 title="Show previous species records"
@@ -458,7 +469,7 @@ Licensed under the MIT License.
                                     >@</span><span
                                         class="terminal-prompt-host"
                                         data-terminal-prompt-host
-                                    >speciedex</span><span
+                                    >speciedex.org</span><span
                                         class="terminal-prompt-path"
                                         data-terminal-prompt-path
                                     >:~</span><span
