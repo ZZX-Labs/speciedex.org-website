@@ -1,0 +1,71 @@
+name: Rebuild Speciedex Species Lookups
+
+on:
+  workflow_dispatch:
+    inputs:
+      purge_first:
+        description: Purge generated lookup products before rebuilding
+        required: true
+        default: true
+        type: boolean
+  repository_dispatch:
+    types: [speciedex-rebuild-species-lookups]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: speciedex-species-lookups-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install icon build dependency
+        run: python -m pip install --disable-pip-version-check pillow
+      - name: Purge generated lookup products
+        if: ${{ github.event_name == 'repository_dispatch' || inputs.purge_first == true }}
+        run: python static/tools/lookups/purge-lookups.py --yes
+      - name: Rebuild class icons
+        run: python static/tools/lookups/build-class-icons.py
+      - name: Build every scientific-name lookup
+        run: python static/tools/lookups/build-all-species-lookups.py
+      - name: Validate generated lookup sizes and JSON
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          roots=[Path('static/data/db/lookups'), Path('static/data/db/indexes/common-names.json')]
+          limit=45*1024*1024
+          files=[]
+          for root in roots:
+              files.extend(root.rglob('*.json') if root.is_dir() else [root])
+          for p in files:
+              if not p.exists(): raise SystemExit(f'missing generated file: {p}')
+              if p.stat().st_size > limit: raise SystemExit(f'generated lookup exceeds 45 MiB: {p} ({p.stat().st_size})')
+              json.load(p.open(encoding='utf-8'))
+          print(f'Validated {len(files)} lookup JSON files.')
+          PY
+      - name: Commit lookup products
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "speciedex-taxonomy-bot"
+          git config user.email "speciedex-taxonomy-bot@users.noreply.github.com"
+          git add -- static/data/db/lookups static/data/db/indexes/common-names.json static/images/taxonomy-classes
+          if git diff --cached --quiet; then
+            echo "No lookup changes."
+            exit 0
+          fi
+          git commit -m "Rebuild Speciedex scientific-name lookups"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
