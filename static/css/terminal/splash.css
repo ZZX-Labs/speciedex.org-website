@@ -1116,3 +1116,67 @@ body.terminal-document-fullscreen {
     max-height: none;
     min-height: 0;
 }
+
+/* =====================================================================
+   Live library viewport hardening
+   Keep the 23-column species row on one physical line.  Scrolling belongs
+   to the reader viewport, never to the page or individual cells.
+   ===================================================================== */
+
+.terminal-splash-reader {
+    --terminal-splash-grid-width: 333rem;
+    box-sizing: border-box;
+    contain: layout paint;
+    height: 100%;
+    max-height: 100%;
+    max-width: 100%;
+    min-height: 0;
+    min-width: 0;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    position: relative;
+    scrollbar-gutter: stable both-edges;
+}
+
+.terminal-splash-columns,
+.terminal-splash-row {
+    box-sizing: border-box;
+    min-width: var(--terminal-splash-grid-width) !important;
+    width: var(--terminal-splash-grid-width) !important;
+    max-width: none !important;
+}
+
+.terminal-splash-list {
+    box-sizing: border-box;
+    min-height: max-content;
+    min-width: var(--terminal-splash-grid-width) !important;
+    width: var(--terminal-splash-grid-width) !important;
+    max-width: none !important;
+    overflow: visible !important;
+}
+
+.terminal-splash-row {
+    align-items: center;
+    white-space: nowrap;
+}
+
+.terminal-splash-row > *,
+.terminal-splash-cell {
+    box-sizing: border-box;
+    min-width: 0 !important;
+    max-width: 100%;
+    overflow: hidden !important;
+    overflow-wrap: normal !important;
+    text-overflow: ellipsis;
+    white-space: nowrap !important;
+    word-break: normal !important;
+}
+
+.terminal-splash-type {
+    overflow: visible !important;
+}
+
+.terminal-splash-type-icon {
+    image-rendering: pixelated;
+}
