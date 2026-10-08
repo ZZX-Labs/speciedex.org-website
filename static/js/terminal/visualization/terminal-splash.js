@@ -518,6 +518,47 @@ Licensed under the MIT License.
             .join(" > ");
     }
 
+    function broadDisplayClass(record, taxonomy = {}) {
+        const values = [
+            taxonomy.domain, taxonomy.kingdom, taxonomy.phylum,
+            taxonomy.class, taxonomy.order,
+            firstField(record, ["material", "material_type", "record_type"]),
+            firstField(record, ["iconic_taxon_name", "iconicTaxonName", "taxon_group", "taxonGroup", "kingdom_name", "kingdomName", "phylum_name", "phylumName", "class_name", "className"]),
+            firstField(record, ["scientific_name", "scientificName", "canonical_name", "canonicalName"])
+        ].map(value => normalizeText(value).toLowerCase()).filter(Boolean);
+        const blob = values.join(" ");
+        const domain = normalizeText(taxonomy.domain).toLowerCase();
+        const kingdom = normalizeText(taxonomy.kingdom).toLowerCase();
+        const phylum = normalizeText(taxonomy.phylum).toLowerCase();
+        const klass = normalizeText(taxonomy.class).toLowerCase();
+        const order = normalizeText(taxonomy.order).toLowerCase();
+
+        if (blob.includes("pollen")) return "pollen";
+        if (/virus|viridae|riboviria|duplodnaviria|monodnaviria|varidnaviria|adnaviria/.test(blob)) return "virus";
+        if (domain === "bacteria" || ["bacteria", "eubacteria"].includes(kingdom)) return "bacteria";
+        if (domain === "archaea" || kingdom === "archaea") return "archaea";
+        if (["scleractinia", "alcyonacea"].includes(order) || klass === "anthozoa") return "coral";
+        if (klass === "aves" || blob.includes("aves")) return "bird";
+        if (klass === "mammalia" || blob.includes("mammalia")) return "mammal";
+        if (["reptilia", "sauropsida"].includes(klass) || blob.includes("reptilia") || blob.includes("sauropsida")) return "reptile";
+        if (klass === "amphibia" || blob.includes("amphibia")) return "amphibian";
+        if (["actinopterygii", "chondrichthyes", "sarcopterygii", "myxini", "petromyzontida"].includes(klass)) return "fish";
+        if (["malacostraca", "branchiopoda", "ostracoda", "maxillopoda"].includes(klass) || blob.includes("crustacea")) return "crustacean";
+        if (klass === "insecta") return "insect";
+        if (klass === "arachnida") return "arachnid";
+        if (phylum === "mollusca") return "mollusk";
+        if (["annelida", "nematoda", "platyhelminthes", "nemertea", "acanthocephala"].includes(phylum)) return "worm";
+        if (phylum === "echinodermata") return "echinoderm";
+        if (phylum === "cnidaria") return "cnidarian";
+        if (phylum === "porifera") return "sponge";
+        if (["chlorophyta", "rhodophyta", "ochrophyta", "charophyta"].includes(phylum) || ["phaeophyceae", "bacillariophyceae"].includes(klass)) return "algae";
+        if (kingdom === "fungi") return "fungi";
+        if (["plantae", "viridiplantae"].includes(kingdom)) return "plant";
+        if (["protista", "protozoa", "chromista"].includes(kingdom)) return "protist";
+        if (blob.includes("plankton")) return "plankton";
+        return "other";
+    }
+
     function normalizeRecord(record, source = "runtime") {
         if (!isObject(record)) {
             return null;
@@ -640,7 +681,12 @@ Licensed under the MIT License.
             "created_at", "updatedAt", "updated_at", "retrieved_at"
         ]);
 
+        const displayClass = broadDisplayClass(record, taxonomy);
+        const displayIcon = `/static/images/taxonomy-classes/${displayClass}.png`;
+
         return {
+            displayClass,
+            displayIcon,
             scientificName,
             canonicalName,
             commonName: commonNames[0] || "No common name",
@@ -2826,6 +2872,21 @@ Licensed under the MIT License.
                     const text = normalizeText(value);
                     return text ? text.slice(0, 10) : "";
                 };
+
+                const typeCell = createElement(
+                    "span",
+                    "terminal-splash-cell terminal-splash-type"
+                );
+                const typeIcon = document.createElement("img");
+                typeIcon.className = "terminal-splash-type-icon";
+                typeIcon.src = record.displayIcon || "/static/images/taxonomy-classes/other.png";
+                typeIcon.alt = record.displayClass ? `${record.displayClass} icon` : "taxon type icon";
+                typeIcon.title = record.displayClass ? record.displayClass.replace(/-/g, " ") : "other";
+                typeIcon.width = 24;
+                typeIcon.height = 24;
+                typeIcon.loading = "lazy";
+                typeCell.appendChild(typeIcon);
+                row.appendChild(typeCell);
 
                 const cells = [
                     ["terminal-splash-scientific", record.scientificName],
