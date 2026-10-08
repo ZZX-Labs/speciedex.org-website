@@ -944,3 +944,220 @@ Licensed under the MIT License.
         width: 100%;
     }
 }
+
+/* =====================================================================
+   Command composer: prompt row + 7/8 command field + 1/8 Run control
+   ===================================================================== */
+
+.terminal-command-form {
+    padding: .8rem 1rem 1rem;
+}
+
+.terminal-command-line {
+    display: grid;
+    gap: .58rem;
+    grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.terminal-prompt-row {
+    min-height: 1.25rem;
+}
+
+.terminal-search-row {
+    align-items: stretch;
+    display: grid !important;
+    gap: .85rem !important;
+    grid-template-columns: minmax(0, 7fr) minmax(6.75rem, 1fr) !important;
+    min-width: 0;
+    width: 100%;
+}
+
+.terminal-search-row .terminal-input {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+}
+
+.terminal-search-row .terminal-submit {
+    box-sizing: border-box;
+    min-width: 0 !important;
+    width: 100%;
+}
+
+@media (max-width: 42rem) {
+    .terminal-search-row {
+        gap: .6rem !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+}
+
+/* =====================================================================
+   Settings overlay
+   ===================================================================== */
+
+.terminal-splash-settings {
+    align-items: center;
+    display: inline-flex;
+    gap: .35rem;
+}
+
+.terminal-settings-gear {
+    display: inline-block;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.terminal-settings-overlay {
+    align-items: center;
+    background: rgba(0, 0, 0, .72);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    padding: 1rem;
+    position: absolute;
+    z-index: 1000;
+}
+
+.terminal-settings-overlay[hidden] {
+    display: none !important;
+}
+
+.terminal-settings-dialog {
+    background: var(--terminal-surface-raised, #10150d);
+    border: 1px solid var(--terminal-border-strong, rgba(192, 214, 116, .5));
+    border-radius: .45rem;
+    box-shadow: 0 1.2rem 4rem rgba(0, 0, 0, .6);
+    color: var(--terminal-foreground, #c0d674);
+    display: grid;
+    gap: .9rem;
+    max-height: min(88dvh, 52rem);
+    max-width: 58rem;
+    overflow: auto;
+    padding: 1rem;
+    width: min(94vw, 58rem);
+}
+
+.terminal-settings-dialog-header,
+.terminal-settings-dialog-footer {
+    align-items: center;
+    display: flex;
+    gap: .7rem;
+    justify-content: space-between;
+}
+
+.terminal-settings-dialog-header h3 {
+    margin: 0;
+}
+
+.terminal-settings-close {
+    min-height: 2rem;
+    min-width: 2rem;
+}
+
+.terminal-settings-grid {
+    display: grid;
+    gap: .85rem 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.terminal-settings-field {
+    background: rgba(0, 0, 0, .18);
+    border: 1px solid rgba(192, 214, 116, .14);
+    border-radius: .35rem;
+    display: grid;
+    gap: .45rem;
+    padding: .7rem;
+}
+
+.terminal-settings-field > label,
+.terminal-settings-field .terminal-settings-label {
+    color: var(--terminal-highlight, #eef7c8);
+    font-size: .72rem;
+    font-weight: 700;
+}
+
+.terminal-settings-field input[type="range"] {
+    width: 100%;
+}
+
+.terminal-settings-field select,
+.terminal-settings-field input[type="number"] {
+    background: rgba(0, 0, 0, .28);
+    border: 1px solid var(--terminal-border, rgba(192, 214, 116, .28));
+    color: inherit;
+    min-height: 2.2rem;
+    padding: .35rem .45rem;
+    width: 100%;
+}
+
+.terminal-settings-knob-wrap {
+    align-items: center;
+    display: grid;
+    gap: .7rem;
+    grid-template-columns: 3.8rem minmax(0, 1fr);
+}
+
+.terminal-settings-knob {
+    --terminal-knob-angle: 0deg;
+    background:
+        radial-gradient(circle at 50% 50%, #1b2317 0 46%, transparent 47%),
+        conic-gradient(from -135deg,
+            var(--terminal-accent, #e6a42b) 0 var(--terminal-knob-angle),
+            rgba(192, 214, 116, .18) var(--terminal-knob-angle) 270deg,
+            transparent 270deg 360deg);
+    border: 1px solid rgba(192, 214, 116, .35);
+    border-radius: 50%;
+    height: 3.4rem;
+    position: relative;
+    width: 3.4rem;
+}
+
+.terminal-settings-knob::after {
+    background: var(--terminal-highlight, #eef7c8);
+    content: "";
+    height: 1rem;
+    left: calc(50% - 1px);
+    position: absolute;
+    top: .38rem;
+    transform: rotate(var(--terminal-knob-angle));
+    transform-origin: 1px 1.32rem;
+    width: 2px;
+}
+
+.terminal-settings-value {
+    color: var(--terminal-accent, #e6a42b);
+    font-variant-numeric: tabular-nums;
+}
+
+.terminal-settings-dialog-footer {
+    border-top: 1px solid rgba(192, 214, 116, .14);
+    padding-top: .85rem;
+}
+
+[data-terminal-root] .terminal-screen,
+[data-terminal-root] .terminal-command-form {
+    font-size: var(--terminal-font-size, 13px);
+    line-height: var(--terminal-line-height, 1.45);
+}
+
+[data-terminal-root] .terminal-splash-row {
+    min-height: var(--terminal-splash-row-height, 32px);
+}
+
+[data-terminal-root] .terminal-splash-wordcloud {
+    opacity: var(--terminal-wordcloud-opacity, .24);
+}
+
+/* CSS-only settings gear: avoids emoji/font-dependent artwork. */
+.terminal-settings-gear {
+    background:
+        radial-gradient(circle, transparent 0 22%, currentColor 24% 39%, transparent 41%),
+        repeating-conic-gradient(currentColor 0 10deg, transparent 10deg 45deg);
+    color: currentColor;
+    height: 1rem;
+    width: 1rem;
+}
+
+[data-terminal-shell] {
+    position: relative;
+}
