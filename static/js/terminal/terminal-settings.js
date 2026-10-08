@@ -59,6 +59,12 @@ Licensed under the MIT License.
         autoScroll: true,
         terminalTheme: "speciedex",
         terminalLayout: "standard",
+        terminalFontSize: 13,
+        terminalLineHeight: 1.45,
+        splashRowHeight: 32,
+        wordCloudOpacity: 0.24,
+        matrixDensity: 1,
+        matrixSpeed: 1,
         outputFormat: "table",
         searchFuzzy: true,
         searchLimit: 50,
@@ -70,8 +76,8 @@ Licensed under the MIT License.
         persistHistory: true,
         recentLimit: 5000,
         splashEnabled: true,
-        splashInterval: 140,
-        splashVisibleRows: 12,
+        splashInterval: 900,
+        splashVisibleRows: 64,
         loadingOverlay: true,
         loadingMinimumDuration: 250,
         timezone: "UTC",
@@ -123,6 +129,48 @@ Licensed under the MIT License.
             values: ["standard", "compact", "wide", "fullscreen"],
             category: "interface",
             description: "Terminal layout mode."
+        },
+        terminalFontSize: {
+            type: "integer",
+            minimum: 10,
+            maximum: 24,
+            category: "interface",
+            description: "Terminal and splash base font size in pixels."
+        },
+        terminalLineHeight: {
+            type: "number",
+            minimum: 1.0,
+            maximum: 2.0,
+            category: "interface",
+            description: "Terminal output line-height multiplier."
+        },
+        splashRowHeight: {
+            type: "integer",
+            minimum: 22,
+            maximum: 60,
+            category: "splash",
+            description: "Minimum live-library row height in pixels."
+        },
+        wordCloudOpacity: {
+            type: "number",
+            minimum: 0.0,
+            maximum: 1.0,
+            category: "splash",
+            description: "Live splash word-cloud opacity."
+        },
+        matrixDensity: {
+            type: "number",
+            minimum: 0.25,
+            maximum: 1.0,
+            category: "splash",
+            description: "Matrix renderer density multiplier."
+        },
+        matrixSpeed: {
+            type: "number",
+            minimum: 0.25,
+            maximum: 3.0,
+            category: "splash",
+            description: "Matrix renderer speed multiplier."
         },
         outputFormat: {
             type: "enum",
@@ -1186,6 +1234,56 @@ Licensed under the MIT License.
                             "layout"
                         )
                     )?.setMode?.(value);
+                    break;
+
+                case "terminalFontSize":
+                    root.style.setProperty(
+                        "--terminal-font-size",
+                        `${value}px`
+                    );
+                    break;
+
+                case "terminalLineHeight":
+                    root.style.setProperty(
+                        "--terminal-line-height",
+                        String(value)
+                    );
+                    break;
+
+                case "splashRowHeight":
+                    root.style.setProperty(
+                        "--terminal-splash-row-height",
+                        `${value}px`
+                    );
+                    break;
+
+                case "wordCloudOpacity":
+                    root.style.setProperty(
+                        "--terminal-wordcloud-opacity",
+                        String(value)
+                    );
+                    break;
+
+                case "matrixDensity":
+                    root.style.setProperty(
+                        "--terminal-matrix-density",
+                        String(value)
+                    );
+                    root.dispatchEvent(new CustomEvent(
+                        "speciedex:terminal-matrix-settings",
+                        { detail: { density: Number(value) } }
+                    ));
+                    break;
+
+                case "matrixSpeed":
+                    root.style.setProperty(
+                        "--terminal-matrix-speed",
+                        String(value)
+                    );
+                    root.dispatchEvent(new CustomEvent(
+                        "speciedex:terminal-matrix-settings",
+                        { detail: { speed: Number(value) } }
+                    ));
                     break;
 
                 case "pageSize":
