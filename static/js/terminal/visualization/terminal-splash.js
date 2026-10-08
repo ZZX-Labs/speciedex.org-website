@@ -45,6 +45,8 @@ Licensed under the MIT License.
     const MATRIX_MODES = Object.freeze(["cmatrix", "zmatrix"]);
     const EMPTY_MESSAGE =
         "Awaiting live species records from providers, scans, search, imports, and archive reconciliation.";
+    const COMMON_NAMES_ENDPOINT =
+        "/static/data/db/indexes/common-names.json";
 
     function shuffleRecords(values) {
         if (!Array.isArray(values) || values.length < 2) {
@@ -370,13 +372,159 @@ Licensed under the MIT License.
             : value;
     }
 
+    function uniqueTexts(values) {
+        const output = [];
+        const seen = new Set();
+
+        for (const value of values || []) {
+            const text = normalizeText(value);
+            const key = text.toLowerCase();
+
+            if (!text || seen.has(key)) {
+                continue;
+            }
+
+            seen.add(key);
+            output.push(text);
+        }
+
+        return output;
+    }
+
+    function textValues(value) {
+        const output = [];
+
+        const visit = item => {
+            if (item === undefined || item === null || item === "") {
+                return;
+            }
+
+            if (Array.isArray(item)) {
+                for (const child of item) {
+                    visit(child);
+                }
+                return;
+            }
+
+            if (isObject(item)) {
+                const named = first(item, [
+                    "name", "value", "label", "title",
+                    "common_name", "commonName",
+                    "vernacular_name", "vernacularName",
+                    "english_name", "englishName"
+                ]);
+
+                if (named) {
+                    visit(named);
+                }
+                return;
+            }
+
+            output.push(normalizeText(item));
+        };
+
+        visit(value);
+        return uniqueTexts(output);
+    }
+
+    function recordContainers(record) {
+        const output = [];
+        const push = value => {
+            if (isObject(value) && !output.includes(value)) {
+                output.push(value);
+            }
+        };
+
+        push(record);
+        push(record?.assertion);
+        push(record?.extra);
+        push(record?.raw);
+        push(record?.taxonomy);
+        push(record?.classification);
+        push(record?.initial_source);
+        push(record?.initialSource);
+
+        for (const parent of [...output]) {
+            push(parent?.assertion);
+            push(parent?.extra);
+            push(parent?.raw);
+            push(parent?.taxonomy);
+            push(parent?.classification);
+            push(parent?.initial_source);
+            push(parent?.initialSource);
+        }
+
+        return output;
+    }
+
+    function collectFields(record, keys) {
+        const values = [];
+
+        for (const container of recordContainers(record)) {
+            for (const key of keys) {
+                if (container?.[key] !== undefined && container?.[key] !== null) {
+                    values.push(...textValues(container[key]));
+                }
+            }
+        }
+
+        return uniqueTexts(values);
+    }
+
+    function firstField(record, keys, fallback = "") {
+        return collectFields(record, keys)[0] || fallback;
+    }
+
+    function normalizeDate(value) {
+        const text = normalizeText(value);
+        const parsed = Date.parse(text);
+
+        return Number.isFinite(parsed)
+            ? new Date(parsed).toISOString()
+            : "";
+    }
+
+    function rankValue(record, rank) {
+        const aliases = {
+            domain: ["domain", "realm", "superkingdom"],
+            kingdom: ["kingdom"],
+            phylum: ["phylum", "division"],
+            class: ["class", "class_name", "className"],
+            order: ["order", "order_name", "orderName"],
+            family: ["family"],
+            genus: ["genus"],
+            species: ["species", "species_name", "speciesName"],
+            subspecies: ["subspecies", "subspecies_name", "subspeciesName"]
+        };
+
+        return firstField(record, aliases[rank] || [rank]);
+    }
+
+    function lineageText(record, taxonomy) {
+        const lineage = firstField(record, ["lineage"]);
+
+        if (lineage) {
+            return lineage;
+        }
+
+        const ordered = [
+            "domain", "kingdom", "phylum", "class", "order",
+            "family", "genus", "species", "subspecies"
+        ];
+
+        return ordered
+            .filter(rank => taxonomy[rank])
+            .map(rank => `${rank}: ${taxonomy[rank]}`)
+            .join(" > ");
+    }
+
     function normalizeRecord(record, source = "runtime") {
         if (!isObject(record)) {
             return null;
         }
 
         const scientificName = normalizeText(
-            first(record, [
+            firstField(record, [
                 "scientific_name", "scientificName", "canonical_name",
                 "canonicalName", "accepted_name", "acceptedName",
                 "taxon_name", "taxonName"
@@ -386,23 +534,38 @@ Licensed under the MIT License.
 
         // Command results and provider status objects share the event stream.
         // Only named taxa belong in the species visualization.
-        if (!scientificName || /^(media|publication|reference|geography)$/i.test(
-            normalizeText(record.rank || record.taxon_rank || record.taxonRank)
-        )) {
+        const rank = normalizeText(firstField(record, [
+            "rank", "taxon_rank", "taxonRank",
+            "taxonomic_rank", "taxonomicRank"
+        ])).toLowerCase();
+
+        if (!scientificName || /^(media|publication|reference|geography)$/i.test(rank)) {
             return null;
         }
 
-        const commonName = normalizeText(
-            first(record, [
-                "common_name", "commonName", "vernacular_name",
-                "vernacularName", "preferred_common_name",
-                "preferredCommonName", "english_name", "englishName"
+        const canonicalName = normalizeText(
+            firstField(record, [
+                "canonical_name", "canonicalName", "accepted_name",
+                "acceptedName"
             ]),
-            "No common name"
+            scientificName
         );
 
+        const commonNames = collectFields(record, [
+            "common_names", "commonNames", "common_name", "commonName",
+            "vernacular_names", "vernacularNames", "vernacular_name",
+            "vernacularName", "preferred_common_name",
+            "preferredCommonName", "english_names", "englishNames",
+            "english_name", "englishName", "local_name", "localName",
+            "fao_english_name", "faoEnglishName"
+        ]).filter(value => {
+            const key = value.toLowerCase();
+            return key !== scientificName.toLowerCase() &&
+                key !== canonicalName.toLowerCase();
+        });
+
         const speciedexId = normalizeText(
-            first(record, [
+            firstField(record, [
                 "speciedex_id", "speciedexId", "speciedex_key",
                 "speciedexKey", "canonical_id", "canonicalId",
                 "taxon_id", "taxonId", "id", "key"
@@ -410,40 +573,95 @@ Licensed under the MIT License.
             "pending"
         );
 
-        const rank = normalizeText(first(record, [
-            "rank", "taxon_rank", "taxonRank",
-            "taxonomic_rank", "taxonomicRank"
+        const providers = collectFields(record, [
+            "providers", "all_providers", "allProviders",
+            "provider", "source", "dataset", "dataset_name", "datasetName"
+        ]).filter(value => value.toLowerCase() !== "runtime");
+
+        const providerIds = collectFields(record, [
+            "provider_ids", "providerIds", "provider_id", "providerId",
+            "source_id", "sourceId"
+        ]);
+
+        const sourceURLs = collectFields(record, [
+            "source_urls", "sourceUrls", "source_url", "sourceUrl",
+            "url", "record_url", "recordUrl"
+        ]).filter(value => /^https?:\/\//i.test(value));
+
+        const taxonomy = {
+            domain: rankValue(record, "domain"),
+            kingdom: rankValue(record, "kingdom"),
+            phylum: rankValue(record, "phylum"),
+            class: rankValue(record, "class"),
+            order: rankValue(record, "order"),
+            family: rankValue(record, "family"),
+            genus: rankValue(record, "genus"),
+            species: rankValue(record, "species"),
+            subspecies: rankValue(record, "subspecies")
+        };
+
+        if (!taxonomy.species && rank === "species") {
+            taxonomy.species = canonicalName;
+        }
+        if (!taxonomy.species && rank === "subspecies") {
+            taxonomy.species = canonicalName.split(/\s+/).slice(0, 2).join(" ");
+        }
+        if (!taxonomy.subspecies && rank === "subspecies") {
+            taxonomy.subspecies = canonicalName;
+        }
+
+        const authorship = normalizeText(firstField(record, [
+            "authorship", "authority", "scientific_name_authorship",
+            "scientificNameAuthorship", "author"
         ]));
 
-        const provider = normalizeText(
-            first(record, [
-                "provider", "source", "provider_id", "providerId",
-                "dataset", "dataset_name", "datasetName"
-            ]),
-            normalizeText(record.initial_source?.provider, source)
-        );
-
-        const status = normalizeText(first(record, [
+        const status = normalizeText(firstField(record, [
             "status", "taxonomic_status", "taxonomicStatus",
             "accepted_status", "acceptedStatus"
         ]));
 
-        const timestamp = first(record, [
+        const dateAdded = normalizeDate(firstField(record, [
+            "first_seen", "firstSeen", "date_added", "dateAdded",
+            "indexed_at", "indexedAt", "created_at", "createdAt"
+        ]));
+
+        const lastSeen = normalizeDate(firstField(record, [
+            "last_seen", "lastSeen", "retrieved_at", "retrievedAt",
+            "changed_at", "changedAt", "updated_at", "updatedAt",
+            "detected_at", "detectedAt", "timestamp"
+        ])) || dateAdded;
+
+        const sourceModified = normalizeDate(firstField(record, [
+            "source_modified", "sourceModified", "modified"
+        ]));
+
+        const detectedTimestamp = firstField(record, [
             "detectedAt", "detected_at", "timestamp", "createdAt",
-            "created_at", "updatedAt", "updated_at"
+            "created_at", "updatedAt", "updated_at", "retrieved_at"
         ]);
 
         return {
             scientificName,
-            commonName,
+            canonicalName,
+            commonName: commonNames[0] || "No common name",
+            commonNames,
+            authorship,
             speciedexId,
             rank,
-            provider,
+            provider: providers[0] || normalizeText(source),
+            providers,
+            providerId: providerIds[0] || "",
+            providerIds,
             status,
             source,
-            detectedAt: Number.isFinite(Date.parse(timestamp))
-                ? new Date(timestamp).toISOString()
-                : iso(),
+            sourceURL: sourceURLs[0] || "",
+            sourceURLs,
+            dateAdded,
+            lastSeen,
+            sourceModified,
+            taxonomy,
+            lineage: lineageText(record, taxonomy),
+            detectedAt: normalizeDate(detectedTimestamp) || iso(),
             raw: clone(record)
         };
     }
@@ -1019,6 +1237,8 @@ Licensed under the MIT License.
             this.seen = new Set();
             this.archiveRecords = [];
             this.archiveSource = null;
+            this.commonNamesIndex = new Map();
+            this.commonNamesPromise = null;
             this.cursor = 0;
             this.timer = 0;
             this.destroyed = false;
@@ -1103,6 +1323,7 @@ Licensed under the MIT License.
             this.bindEvents();
             this.observeVisibility();
             this.render();
+            void this.loadCommonNamesIndex();
 
             if (this.options.autoplay) {
                 this.start();
@@ -2045,6 +2266,72 @@ Licensed under the MIT License.
             return true;
         }
 
+        async loadCommonNamesIndex() {
+            if (this.commonNamesPromise) {
+                return this.commonNamesPromise;
+            }
+
+            this.commonNamesPromise = (async () => {
+                try {
+                    const response = await fetch(COMMON_NAMES_ENDPOINT, {
+                        cache: "no-cache",
+                        signal: this.abortController.signal
+                    });
+
+                    if (!response.ok) {
+                        return 0;
+                    }
+
+                    const payload = await response.json();
+                    const source = isObject(payload?.names)
+                        ? payload.names
+                        : isObject(payload)
+                            ? payload
+                            : {};
+                    const next = new Map();
+
+                    for (const [identifier, value] of Object.entries(source)) {
+                        const names = textValues(value);
+                        if (names.length) {
+                            next.set(identifier, names);
+                        }
+                    }
+
+                    this.commonNamesIndex = next;
+                    this.scheduleRender({ wordCloud: true });
+                    return next.size;
+                } catch (_error) {
+                    return 0;
+                }
+            })();
+
+            return this.commonNamesPromise;
+        }
+
+        applyCommonNames(record) {
+            if (!record?.speciedexId) {
+                return record;
+            }
+
+            const indexed = this.commonNamesIndex.get(record.speciedexId) || [];
+            if (!indexed.length) {
+                return record;
+            }
+
+            const names = uniqueTexts([
+                ...(record.commonNames || []),
+                ...indexed
+            ]).filter(value => {
+                const key = value.toLowerCase();
+                return key !== record.scientificName.toLowerCase() &&
+                    key !== record.canonicalName.toLowerCase();
+            });
+
+            record.commonNames = names;
+            record.commonName = names[0] || record.commonName;
+            return record;
+        }
+
         randomIndex(maxExclusive) {
             const maximum =
                 Math.floor(Number(maxExclusive));
@@ -2151,9 +2438,11 @@ Licensed under the MIT License.
                 }
 
                 const record =
-                    normalizeRecord(
-                        raw,
-                        this.archiveSource || "Speciedex canonical archive"
+                    this.applyCommonNames(
+                        normalizeRecord(
+                            raw,
+                            this.archiveSource || "Speciedex canonical archive"
+                        )
                     );
 
                 if (!record) {
@@ -2184,7 +2473,9 @@ Licensed under the MIT License.
             this.metrics.received += incoming.length;
 
             for (const raw of incoming) {
-                const record = normalizeRecord(raw, source);
+                const record = this.applyCommonNames(
+                    normalizeRecord(raw, source)
+                );
 
                 if (!record) {
                     rejected += 1;
@@ -2531,60 +2822,50 @@ Licensed under the MIT License.
                     `${record.scientificName}, ${record.commonName}`
                 );
 
-                const scientific = createElement(
-                    "span",
-                    "terminal-splash-scientific",
-                    record.scientificName
-                );
-                const common = createElement(
-                    "span",
-                    "terminal-splash-common",
-                    record.commonName
-                );
-                const identifier = createElement(
-                    "code",
-                    "terminal-splash-id",
-                    record.speciedexId
-                );
-                const metadata = createElement(
-                    "span",
-                    "terminal-splash-meta"
-                );
+                const displayDate = value => {
+                    const text = normalizeText(value);
+                    return text ? text.slice(0, 10) : "";
+                };
 
-                if (record.rank) {
-                    metadata.appendChild(
-                        createElement(
-                            "span",
-                            "terminal-splash-rank",
-                            record.rank
-                        )
+                const cells = [
+                    ["terminal-splash-scientific", record.scientificName],
+                    ["terminal-splash-common", (record.commonNames || []).join("; ") || record.commonName],
+                    ["terminal-splash-canonical", record.canonicalName],
+                    ["terminal-splash-authorship", record.authorship],
+                    ["terminal-splash-rank", record.rank],
+                    ["terminal-splash-record-status", record.status],
+                    ["terminal-splash-provider", (record.providers || []).join("; ") || record.provider],
+                    ["terminal-splash-provider-id", (record.providerIds || []).join("; ") || record.providerId],
+                    ["terminal-splash-id", record.speciedexId, "code"],
+                    ["terminal-splash-date-added", displayDate(record.dateAdded), "span", record.dateAdded],
+                    ["terminal-splash-last-seen", displayDate(record.lastSeen), "span", record.lastSeen],
+                    ["terminal-splash-domain", record.taxonomy?.domain],
+                    ["terminal-splash-kingdom", record.taxonomy?.kingdom],
+                    ["terminal-splash-phylum", record.taxonomy?.phylum],
+                    ["terminal-splash-class", record.taxonomy?.class],
+                    ["terminal-splash-order", record.taxonomy?.order],
+                    ["terminal-splash-family", record.taxonomy?.family],
+                    ["terminal-splash-genus", record.taxonomy?.genus],
+                    ["terminal-splash-species", record.taxonomy?.species],
+                    ["terminal-splash-subspecies", record.taxonomy?.subspecies],
+                    ["terminal-splash-lineage", record.lineage],
+                    ["terminal-splash-source-url", (record.sourceURLs || []).join("; ") || record.sourceURL]
+                ];
+
+                for (const [className, value, tagName = "span", title = ""] of cells) {
+                    const cell = createElement(
+                        tagName,
+                        `terminal-splash-cell ${className}`,
+                        normalizeText(value)
                     );
-                }
 
-                if (record.provider) {
-                    metadata.appendChild(
-                        createElement(
-                            "span",
-                            "terminal-splash-provider",
-                            record.provider
-                        )
-                    );
-                }
+                    if (title) {
+                        cell.title = title;
+                    } else if (normalizeText(value).length > 48) {
+                        cell.title = normalizeText(value);
+                    }
 
-                if (record.status) {
-                    metadata.appendChild(
-                        createElement(
-                            "span",
-                            "terminal-splash-record-status",
-                            record.status
-                        )
-                    );
-                }
-
-                row.append(scientific, common, identifier);
-
-                if (metadata.childNodes.length) {
-                    row.appendChild(metadata);
+                    row.appendChild(cell);
                 }
 
                 fragment.appendChild(row);
@@ -2622,6 +2903,8 @@ Licensed under the MIT License.
             this.records = [];
             this.archiveRecords = [];
             this.archiveSource = null;
+            this.commonNamesIndex = new Map();
+            this.commonNamesPromise = null;
             this.seen.clear();
             this.cursor = 0;
             this.metrics.clears += 1;
