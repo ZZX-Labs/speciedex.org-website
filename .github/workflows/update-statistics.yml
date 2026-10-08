@@ -1192,6 +1192,9 @@ jobs:
           printf '%s\n' \
             "No HTML, CSS, or JavaScript source files were modified."
 
+      - name: Validate complete provider accounting for publication
+        run: python static/tools/provider-readiness.py --policy publishable
+
       - name: Check for archive changes
         id: changes
         run: |
@@ -1299,9 +1302,6 @@ jobs:
             "Unable to push the taxonomic archive update."
 
           exit 1
-
-      - name: Require observed operational results from every provider
-        run: python static/tools/provider-readiness.py
 
       - name: Write workflow summary
         if: always()
