@@ -1,28 +1,27 @@
 {
   "compression": "gzip",
   "deduplicate": false,
-  "expected_records": 155077,
-  "generated_at": "2026-10-08T00:16:43Z",
+  "expected_records": 155169,
+  "generated_at": "2026-10-08T04:18:03Z",
   "insert_batch_size": 500,
   "kind": "mariadb-logical",
-  "max_bytes": 94371840,
-  "rows_per_shard": 100000,
+  "max_bytes": 50331648,
+  "rows_per_shard": 30000,
   "schema": "schema.sql",
   "schema_version": 2,
   "shards": [
     {
-      "bytes": 6432337,
+      "bytes": 3621679,
       "filename": "speciedex-000001.sql.gz",
       "first_id": "spx:sha256:51b4e75ef19da8f6ca5f0788250e6311a93da7a13bd116e456911526cf258f21",
       "first_indexed_at": "2026-07-19T00:07:05Z",
       "id": "000001",
-      "last_id": "spx:sha256:2bd4e89afd8741fbd861613f95bab927088050392691cc29398e0fc8b9306104",
-      "last_indexed_at": "2026-07-23T22:53:09Z",
+      "last_id": "spx:sha256:6f3782cc37d34e9a1372bd0671c7a804c7fc774a82c75bc39d6b7667b4a226fe",
+      "last_indexed_at": "2026-07-21T23:00:03Z",
       "path": "speciedex-000001.sql.gz",
       "providers": [
         "gbif",
         "inaturalist",
-        "itis",
         "wikipedia",
         "wikispecies",
         "worms"
@@ -36,52 +35,53 @@
         "order",
         "phylum",
         "species",
-        "suborder",
         "subspecies",
         "unranked"
       ],
-      "records": 44743,
-      "sha256": "296c4f4cfe6b7c4b05fd5e97685c038338b903879dedaca83141bb98335c2b3c",
+      "records": 25301,
+      "sha256": "7024ae0f14c3c46f196409820eec7c4413f3d32473e6950699bc7130cfa09c81",
       "shard_id": "000001"
     },
     {
-      "bytes": 6389665,
+      "bytes": 3522907,
       "filename": "speciedex-000002.sql.gz",
-      "first_id": "spx:sha256:cd3fc073d4a1d75a2b008b41f19e1ccbb153d0a70b4036aab8abcadd6c0c5cb4",
-      "first_indexed_at": "2026-07-23T22:53:09Z",
+      "first_id": "spx:sha256:857a529b77b8df76327f9f6c1fa6e106c26cde69052123bfc0aab0740b49b245",
+      "first_indexed_at": "2026-07-21T23:00:03Z",
       "id": "000002",
-      "last_id": "spx:sha256:b4b48514c944ce738629d7562c78b8dcfa8fb27abb7a724cf8f7bab95d9e9ead",
-      "last_indexed_at": "2026-07-28T04:09:08Z",
+      "last_id": "spx:sha256:66b4f5b9b10f3adf1e997eea48010a343d6c0f5ec6e0540c67fc1ceece70ffa1",
+      "last_indexed_at": "2026-07-24T14:29:04Z",
       "path": "speciedex-000002.sql.gz",
       "providers": [
         "gbif",
+        "inaturalist",
         "itis",
         "wikipedia",
         "wikispecies",
         "worms"
       ],
       "ranks": [
+        "class",
         "family",
-        "form",
         "genus",
+        "kingdom",
         "order",
         "species",
+        "suborder",
         "subspecies",
-        "tribe",
         "unranked"
       ],
-      "records": 43388,
-      "sha256": "5abc36786178364418bf923ab08187ddd3950956b7f04efdab091e23faccb83b",
+      "records": 24278,
+      "sha256": "39ca78ddd615956c0d6109f16a6a908102096e4cc8b2bb1fbd5f40aefbf1eeed",
       "shard_id": "000002"
     },
     {
-      "bytes": 6461544,
+      "bytes": 3517426,
       "filename": "speciedex-000003.sql.gz",
-      "first_id": "spx:sha256:2efb3b38fdd502403cbb228d39e6d60f8f536901067f96670f5cabe39806a67a",
-      "first_indexed_at": "2026-07-28T04:09:08Z",
+      "first_id": "spx:sha256:bc866a57b6ea1778e9aeecef1736315ecf9ca1c51283b4dda780fe91369939be",
+      "first_indexed_at": "2026-07-24T14:29:04Z",
       "id": "000003",
-      "last_id": "spx:sha256:217f72d9066c6ad9026fee8b2e6d6dab85c2f0079cdb20bc4a515924d6b27bf9",
-      "last_indexed_at": "2026-08-14T01:52:22Z",
+      "last_id": "spx:sha256:5f943e1850d00ef8c982d3b393580e05e2f6fa62adcf127a631c0bb0970dcdc8",
+      "last_indexed_at": "2026-07-26T11:09:25Z",
       "path": "speciedex-000003.sql.gz",
       "providers": [
         "gbif",
@@ -91,29 +91,26 @@
         "worms"
       ],
       "ranks": [
-        "clade",
         "family",
         "form",
         "genus",
-        "infraorder",
         "species",
         "subspecies",
         "tribe",
-        "unranked",
-        "variety"
+        "unranked"
       ],
-      "records": 44338,
-      "sha256": "6de5ba1529a5bec9635950143482d7b0fe550d675674c67bdbfc62e41d78af02",
+      "records": 24157,
+      "sha256": "b64f30130bb02a81fd6a963c7601388491335b9946b4b43cd5f754e1fed00d56",
       "shard_id": "000003"
     },
     {
-      "bytes": 3097804,
+      "bytes": 3579935,
       "filename": "speciedex-000004.sql.gz",
-      "first_id": "spx:sha256:5b350ad9315fe93024360f7ac406473e9096cdaf7ba9bb7825a937b2ff8615ac",
-      "first_indexed_at": "2026-08-14T04:08:30Z",
+      "first_id": "spx:sha256:394ed3c99e24ac87bb9da9860657830ea982a3967c89b371f4a08169ac15871b",
+      "first_indexed_at": "2026-07-26T11:09:25Z",
       "id": "000004",
-      "last_id": "spx:sha256:de2248cca9bdbb46446d2c285b43416424598c3a4acd3451854f3045a6d2ed8f",
-      "last_indexed_at": "2026-10-08T00:16:05Z",
+      "last_id": "spx:sha256:af44954b9030ec8518672bbce35bd22f11c8eeddc2e4be8d5e2bbfba269e7284",
+      "last_indexed_at": "2026-07-29T14:41:50Z",
       "path": "speciedex-000004.sql.gz",
       "providers": [
         "gbif",
@@ -123,6 +120,61 @@
         "worms"
       ],
       "ranks": [
+        "family",
+        "genus",
+        "order",
+        "species",
+        "subspecies",
+        "unranked"
+      ],
+      "records": 23989,
+      "sha256": "18a1004865fdd407bf6733bca299987ec06687748759a56f675b649f07cc3745",
+      "shard_id": "000004"
+    },
+    {
+      "bytes": 3603218,
+      "filename": "speciedex-000005.sql.gz",
+      "first_id": "spx:sha256:ac3df72f5b28be108f0d92193512c817eb29fdfa843a930702f54284bef612f5",
+      "first_indexed_at": "2026-07-29T14:41:50Z",
+      "id": "000005",
+      "last_id": "spx:sha256:f696cd41737a87283b25de2a5f3ec45005f430865336fd31c1a77f8614bcfca4",
+      "last_indexed_at": "2026-08-04T00:14:12Z",
+      "path": "speciedex-000005.sql.gz",
+      "providers": [
+        "gbif",
+        "itis",
+        "wikipedia",
+        "wikispecies",
+        "worms"
+      ],
+      "ranks": [
+        "form",
+        "genus",
+        "species",
+        "subspecies",
+        "unranked"
+      ],
+      "records": 24168,
+      "sha256": "0430698bd36ca803463e137a9a5db854f83ee99d2845d0895c32f6d0ab3efb69",
+      "shard_id": "000005"
+    },
+    {
+      "bytes": 3604513,
+      "filename": "speciedex-000006.sql.gz",
+      "first_id": "spx:sha256:19f81d04b39e4d3160729a698e430cd29739dbcf0efd760e960d13c346c9cefa",
+      "first_indexed_at": "2026-08-04T00:14:12Z",
+      "id": "000006",
+      "last_id": "spx:sha256:5aa341fcc596b43b400bf560bf0f4dd79c7084a25ed219e49505ab71a443060f",
+      "last_indexed_at": "2026-08-21T11:00:24Z",
+      "path": "speciedex-000006.sql.gz",
+      "providers": [
+        "itis",
+        "wikipedia",
+        "wikispecies",
+        "worms"
+      ],
+      "ranks": [
+        "clade",
         "class",
         "family",
         "form",
@@ -134,11 +186,41 @@
         "species",
         "subspecies",
         "superorder",
+        "tribe",
+        "unranked",
+        "variety"
+      ],
+      "records": 26467,
+      "sha256": "4e9a3910e68c18a974a40afebf05b71fcbcf9fb1ebda984f680da139d19d7b14",
+      "shard_id": "000006"
+    },
+    {
+      "bytes": 946967,
+      "filename": "speciedex-000007.sql.gz",
+      "first_id": "spx:sha256:d4f5a8e3ffb9fde5e5bdb362991ef46aadf5193995c9f441e93f79ff89753e19",
+      "first_indexed_at": "2026-08-21T11:00:24Z",
+      "id": "000007",
+      "last_id": "spx:sha256:ff61ddf4029bb8ee9fb11ae7b8feecc68049c3daa3681d2ce9174327acba8550",
+      "last_indexed_at": "2026-10-08T04:17:02Z",
+      "path": "speciedex-000007.sql.gz",
+      "providers": [
+        "gbif",
+        "itis",
+        "wikipedia",
+        "wikispecies",
+        "worms"
+      ],
+      "ranks": [
+        "family",
+        "form",
+        "genus",
+        "species",
+        "subspecies",
         "unranked"
       ],
-      "records": 22608,
-      "sha256": "b69d7536001e7fb7748062aec3b69c54db4b5e59e89160a53c14d0469987b35a",
-      "shard_id": "000004"
+      "records": 6809,
+      "sha256": "d76965e72176e8efe7c5a3087b30cd87e56bd0936f916155a129fca71897d59e",
+      "shard_id": "000007"
     }
   ],
   "source": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy/manifest.json",
@@ -148,10 +230,10 @@
   ],
   "source_mode": "manifest",
   "strict": false,
-  "target_bytes": 75497472,
+  "target_bytes": 41943040,
   "totals": {
-    "bytes": 22381350,
-    "records": 155077,
-    "shards": 4
+    "bytes": 22396645,
+    "records": 155169,
+    "shards": 7
   }
 }

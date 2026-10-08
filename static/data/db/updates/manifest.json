@@ -1,19 +1,19 @@
 {
   "files": {
-    "additions-20261008T001703Z.jsonl.gz": {
-      "bytes": 10150,
-      "records": 65,
-      "sha256": "e0705e8d8d2dc5923ba3fdc9427c6411f83622a5277fd5cdf545e303073a1570"
+    "additions-20261008T041906Z.jsonl.gz": {
+      "bytes": 13823,
+      "records": 92,
+      "sha256": "cf57eb0ce8edd2bed0558c842dda3d2c8259200a03b04644b386ab62659b697b"
     },
-    "deletions-20261008T001703Z.json": {
+    "deletions-20261008T041906Z.json": {
       "bytes": 3,
       "records": 0,
       "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
     },
     "latest-additions.jsonl.gz": {
-      "bytes": 10150,
-      "records": 65,
-      "sha256": "e0705e8d8d2dc5923ba3fdc9427c6411f83622a5277fd5cdf545e303073a1570"
+      "bytes": 13823,
+      "records": 92,
+      "sha256": "cf57eb0ce8edd2bed0558c842dda3d2c8259200a03b04644b386ab62659b697b"
     },
     "latest-deletions.json": {
       "bytes": 3,
@@ -21,19 +21,19 @@
       "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
     }
   },
-  "generated_at": "2026-10-08T00:17:03Z",
+  "generated_at": "2026-10-08T04:19:06Z",
   "kind": "database-updates",
   "latest": {
-    "additions": "additions-20261008T001703Z.jsonl.gz",
-    "deletions": "deletions-20261008T001703Z.json",
+    "additions": "additions-20261008T041906Z.jsonl.gz",
+    "deletions": "deletions-20261008T041906Z.json",
     "latest_additions": "latest-additions.jsonl.gz",
     "latest_deletions": "latest-deletions.json"
   },
   "schema_version": 3,
   "source": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy",
   "totals": {
-    "additions_or_changes": 65,
+    "additions_or_changes": 92,
     "deletions": 0,
-    "records": 155077
+    "records": 155169
   }
 }

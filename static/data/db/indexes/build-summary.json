@@ -1,29 +1,32 @@
 {
   "duplicate_ids": 0,
-  "duration_seconds": 12.285864,
-  "expected_records": 155077,
-  "generated_at": "2026-10-08T00:16:56Z",
-  "indexed_records": 155077,
+  "duration_seconds": 48.865693,
+  "expected_records": 155169,
+  "generated_at": "2026-10-08T04:18:52Z",
+  "indexed_records": 155169,
   "issues": [],
-  "name_keys": 244413,
+  "name_keys": 245672,
   "providers": 6,
-  "schema_version": 3,
-  "shard_size": null,
-  "sharded": false,
+  "schema_version": 4,
+  "shard_size": 20000,
+  "sharded": true,
   "skipped_records": 0,
   "source_files": [
     "volumes/species-000001.jsonl",
     "volumes/species-000002.jsonl"
   ],
   "source_mode": "manifest",
-  "source_records": 155077,
+  "source_records": 155169,
   "status": "success",
   "taxonomy_values": {
+    "class": 328,
     "class_name": 327,
     "family": 7316,
     "genus": 11580,
-    "kingdom": 9,
+    "kingdom": 15,
+    "order": 1237,
     "order_name": 1237,
-    "phylum": 121
+    "phylum": 121,
+    "species": 259
   }
 }

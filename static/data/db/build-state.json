@@ -2,66 +2,72 @@
   "complete": true,
   "components": {
     "indexes": {
-      "generated_at": "2026-10-08T00:16:54Z",
-      "records": 155077,
-      "schema_version": 3
+      "generated_at": "2026-10-08T04:18:49Z",
+      "records": 155169,
+      "schema_version": 4
     },
     "mariadb": {
-      "generated_at": "2026-10-08T00:16:43Z",
-      "records": 155077,
+      "generated_at": "2026-10-08T04:18:03Z",
+      "records": 155169,
       "schema_version": 2
     },
     "sqlite": {
-      "generated_at": "2026-10-08T00:16:28Z",
-      "records": 155077,
+      "generated_at": "2026-10-08T04:17:37Z",
+      "records": 155169,
       "schema_version": 2
     },
     "updates": {
-      "generated_at": "2026-10-08T00:17:03Z",
-      "records": 155077,
+      "generated_at": "2026-10-08T04:19:06Z",
+      "records": 155169,
       "schema_version": 3
     }
   },
   "database_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging",
   "duration": "00:00:00",
-  "duration_seconds": 0.271953,
+  "duration_seconds": 0.424445,
   "files": {
-    "bytes": 488115983,
-    "count": 33
+    "bytes": 550691474,
+    "count": 55
   },
-  "generated_at": "2026-10-08T00:17:30.131514+00:00",
+  "generated_at": "2026-10-08T04:19:53.751789+00:00",
   "indexes": {
     "duplicate_ids": 0,
-    "name_keys": 244413,
+    "name_keys": 245672,
     "providers": 6,
-    "records": 155077,
-    "shards": 0,
+    "records": 155169,
+    "records_with_common_names": 1130,
+    "records_without_common_names": 154039,
+    "revision_assertions_scanned": 32140,
+    "revision_enriched_records": 2642,
+    "shards": 13,
     "skipped_records": 0,
-    "source_records": 155077,
-    "taxonomy_values": 20590
+    "source_records": 155169,
+    "species_shards": 9,
+    "taxonomy_shards": 4,
+    "taxonomy_values": 22420
   },
   "mariadb": {
-    "bytes": 22381350,
-    "records": 155077,
-    "shards": 4
+    "bytes": 22396645,
+    "records": 155169,
+    "shards": 7
   },
   "parity": {
     "comparable": true,
     "equal": true,
     "index_equal": true,
-    "index_records": 155077,
-    "mariadb_records": 155077,
-    "sqlite_records": 155077
+    "index_records": 155169,
+    "mariadb_records": 155169,
+    "sqlite_records": 155169
   },
   "schema_version": 2,
   "sqlite": {
-    "bytes": 251551744,
-    "records": 155077,
-    "shards": 4
+    "bytes": 251113472,
+    "records": 155169,
+    "shards": 7
   },
   "updates": {
-    "additions_or_changes": 65,
+    "additions_or_changes": 92,
     "deletions": 0,
-    "records": 155077
+    "records": 155169
   }
 }

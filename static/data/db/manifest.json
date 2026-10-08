@@ -6,23 +6,23 @@
   "complete": true,
   "component_summary": {
     "indexes": {
-      "generated_at": "2026-10-08T00:16:54Z",
-      "records": 155077,
-      "schema_version": 3
+      "generated_at": "2026-10-08T04:18:49Z",
+      "records": 155169,
+      "schema_version": 4
     },
     "mariadb": {
-      "generated_at": "2026-10-08T00:16:43Z",
-      "records": 155077,
+      "generated_at": "2026-10-08T04:18:03Z",
+      "records": 155169,
       "schema_version": 2
     },
     "sqlite": {
-      "generated_at": "2026-10-08T00:16:28Z",
-      "records": 155077,
+      "generated_at": "2026-10-08T04:17:37Z",
+      "records": 155169,
       "schema_version": 2
     },
     "updates": {
-      "generated_at": "2026-10-08T00:17:03Z",
-      "records": 155077,
+      "generated_at": "2026-10-08T04:19:06Z",
+      "records": 155169,
       "schema_version": 3
     }
   },
@@ -32,13 +32,27 @@
     "sqlite": "sqlite/manifest.json",
     "updates": "updates/manifest.json"
   },
-  "file_count": 33,
+  "file_count": 55,
   "files": [
     "README.md",
     "indexes/build-summary.json",
     "indexes/manifest.json",
     "indexes/names.json",
     "indexes/providers.json",
+    "indexes/shards.json",
+    "indexes/shards/species-00000.json",
+    "indexes/shards/species-00001.json",
+    "indexes/shards/species-00002.json",
+    "indexes/shards/species-00003.json",
+    "indexes/shards/species-00004.json",
+    "indexes/shards/species-00005.json",
+    "indexes/shards/species-00006.json",
+    "indexes/shards/species-00007.json",
+    "indexes/shards/species-00008.json",
+    "indexes/shards/taxonomy-00000.json",
+    "indexes/shards/taxonomy-00001.json",
+    "indexes/shards/taxonomy-00002.json",
+    "indexes/shards/taxonomy-00003.json",
     "indexes/species.json",
     "indexes/taxonomy.json",
     "mariadb/build-state.json",
@@ -49,6 +63,9 @@
     "mariadb/speciedex-000002.sql.gz",
     "mariadb/speciedex-000003.sql.gz",
     "mariadb/speciedex-000004.sql.gz",
+    "mariadb/speciedex-000005.sql.gz",
+    "mariadb/speciedex-000006.sql.gz",
+    "mariadb/speciedex-000007.sql.gz",
     "providers.json",
     "reports/parity.json",
     "reports/shards.json",
@@ -60,27 +77,32 @@
     "sqlite/speciedex-000002.sqlite3",
     "sqlite/speciedex-000003.sqlite3",
     "sqlite/speciedex-000004.sqlite3",
+    "sqlite/speciedex-000005.sqlite3",
+    "sqlite/speciedex-000006.sqlite3",
+    "sqlite/speciedex-000007.sqlite3",
     "updates/additions-20261007T221441Z.jsonl.gz",
     "updates/additions-20261008T001703Z.jsonl.gz",
+    "updates/additions-20261008T041906Z.jsonl.gz",
     "updates/deletions-20261007T221441Z.json",
     "updates/deletions-20261008T001703Z.json",
+    "updates/deletions-20261008T041906Z.json",
     "updates/latest-additions.jsonl.gz",
     "updates/latest-deletions.json",
     "updates/manifest.json"
   ],
-  "generated_at": "2026-10-08T00:17:30.131341+00:00",
+  "generated_at": "2026-10-08T04:19:53.751527+00:00",
   "indexes": "indexes/manifest.json",
   "mariadb": "mariadb/manifest.json",
   "parity": {
     "comparable": true,
     "equal": true,
     "index_equal": true,
-    "index_records": 155077,
-    "mariadb_records": 155077,
-    "sqlite_records": 155077
+    "index_records": 155169,
+    "mariadb_records": 155169,
+    "sqlite_records": 155169
   },
   "schema_version": 2,
   "sqlite": "sqlite/manifest.json",
-  "total_bytes": 488115983,
+  "total_bytes": 550691474,
   "updates": "updates/manifest.json"
 }

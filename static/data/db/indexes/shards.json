@@ -1,0 +1,145 @@
+{
+  "generated_at": "2026-10-08T04:18:49Z",
+  "kind": "browser-index-shards",
+  "schema_version": 4,
+  "shard_max_bytes": 47185920,
+  "shard_target_bytes": 16777216,
+  "species": [
+    {
+      "bytes": 16740827,
+      "filename": "shards/species-00000.json",
+      "first_key": "spx:sha256:000007bc7b3e38e65aa600e21d26a419c10051e16ef726cddd1bfd7498cc9593",
+      "id": "00000",
+      "last_key": "spx:sha256:1d59b146a5e5c526c6f196f83a53d4cdb709afcad649b99f502a8588b45b8c4c",
+      "path": "shards/species-00000.json",
+      "records": 17770,
+      "sha256": "3834a0e533332af2ec5aa2757edbf003414f085a33fd20b33abc76a87bf571dc"
+    },
+    {
+      "bytes": 16740896,
+      "filename": "shards/species-00001.json",
+      "first_key": "spx:sha256:1d59cd7c1116f52e9027eb3f6f3519cdbaffde0ff12b949f79cb51ec0af71003",
+      "id": "00001",
+      "last_key": "spx:sha256:3a82f877a3728f654c56deae6a53f654e1c526ecd3190fef69adc5ad8edd51b9",
+      "path": "shards/species-00001.json",
+      "records": 17776,
+      "sha256": "d88e8866d3dfc64d69d390b623eaba7960d097385afcfd37a6e8e091fc67fa02"
+    },
+    {
+      "bytes": 16741052,
+      "filename": "shards/species-00002.json",
+      "first_key": "spx:sha256:3a843e16d2aae488028441a4b043c1d7b3bd7b514bc9e40d48fd25dfda01437b",
+      "id": "00002",
+      "last_key": "spx:sha256:576dfa1e4a9a29b8def259986f0560907b686f1c921c05e12e57570ca873ae4f",
+      "path": "shards/species-00002.json",
+      "records": 17783,
+      "sha256": "770ae38fd4cc4e8c5a4379660b5ef442a2b7e1e461e1bf53d1755ce9c5434a46"
+    },
+    {
+      "bytes": 16741277,
+      "filename": "shards/species-00003.json",
+      "first_key": "spx:sha256:576e223a1faa74618c56cbb75270f92142432fbcfe538a9dc8991dccfe0f6749",
+      "id": "00003",
+      "last_key": "spx:sha256:74f3b3f58e34a7417c585b919ccded8780f98de57b27a5a7800a0351af22faaa",
+      "path": "shards/species-00003.json",
+      "records": 17765,
+      "sha256": "4e8815dd2d52ab49417a6b67b747b6deb9439f915f0254a7ba9c01603c18fb24"
+    },
+    {
+      "bytes": 16741102,
+      "filename": "shards/species-00004.json",
+      "first_key": "spx:sha256:74f487a6bc3b2dd480c7884434adf88490c3ed612cec3f203f6876ec82474797",
+      "id": "00004",
+      "last_key": "spx:sha256:92b0d5f3d38902b8ddb179f58f97a17ec504e0ddb7066d1ff910ff28eb161d71",
+      "path": "shards/species-00004.json",
+      "records": 17799,
+      "sha256": "8ef7306f16d5c2728924b2fef88300eb39c1199ab71f5a4572f022f39516ad67"
+    },
+    {
+      "bytes": 16741587,
+      "filename": "shards/species-00005.json",
+      "first_key": "spx:sha256:92b0ef157f56710d9e9e78b7eb003d5408fda6d61acd34cdae25822831d94b4d",
+      "id": "00005",
+      "last_key": "spx:sha256:affcc43ee9bdd79e490558ce2e2b51f5cccca4b1ec74f61efac0719ed961636f",
+      "path": "shards/species-00005.json",
+      "records": 17803,
+      "sha256": "11adbed7226ba5734b507fa1c15cce154e2c1335ce25fce39a946b0f7b602e82"
+    },
+    {
+      "bytes": 16741219,
+      "filename": "shards/species-00006.json",
+      "first_key": "spx:sha256:affdcb3ce4fb6550a91d1c34bce04243014c1fc9248e431d93a185448bef7711",
+      "id": "00006",
+      "last_key": "spx:sha256:cd7520ff97c19791038189e34448f9c16d72102cabfa6583629a20cf3451e8c1",
+      "path": "shards/species-00006.json",
+      "records": 17753,
+      "sha256": "cc2b9621a7830cb73f18f5d1924a4bfd4820e68d6623f11bc145d0e426996756"
+    },
+    {
+      "bytes": 16741517,
+      "filename": "shards/species-00007.json",
+      "first_key": "spx:sha256:cd75ae97b882f2e9cb22d66e2260251a43bb46c9218fbe486fe7586b97c03a5b",
+      "id": "00007",
+      "last_key": "spx:sha256:ea7ece4d80e74096cf9d72757c332679a426dd3eb3312935aa13e493396d9af2",
+      "path": "shards/species-00007.json",
+      "records": 17752,
+      "sha256": "6eb2160c09eaf843b8b61a0a4c83d79442bee01d57506735661bf475fc4f054c"
+    },
+    {
+      "bytes": 12199056,
+      "filename": "shards/species-00008.json",
+      "first_key": "spx:sha256:ea81284931d7d03c1d0b93cf0b99531a0e1bc73f818a0bd04ebb814987fc54ea",
+      "id": "00008",
+      "last_key": "spx:sha256:ffff9c1a85b9f82bf89af1dcf471252ca8f1242e3029d03a942e3c264cf25436",
+      "path": "shards/species-00008.json",
+      "records": 12968,
+      "sha256": "8a8548bdac807581767a43c531b3c0017f3fec9b94bc0232813b74f23e218db1"
+    }
+  ],
+  "taxonomy": [
+    {
+      "bytes": 16316008,
+      "filename": "shards/taxonomy-00000.json",
+      "first_key": "class:Acantharia",
+      "id": "00000",
+      "last_key": "family:Cepolidae",
+      "path": "shards/taxonomy-00000.json",
+      "records": 1916,
+      "sha256": "fdf51432e4521df04102f70a49c6f18e4f968f7ad792f7219d6d0c462a47f8c8",
+      "taxonomy_values": 1916
+    },
+    {
+      "bytes": 14661146,
+      "filename": "shards/taxonomy-00001.json",
+      "first_key": "family:Cerambycidae",
+      "id": "00001",
+      "last_key": "genus:Zyras",
+      "path": "shards/taxonomy-00001.json",
+      "records": 17635,
+      "sha256": "c3adbadacf0a9ca80c4d242972a6422be1cf97f064d0c91f403f1623eb50d21c",
+      "taxonomy_values": 17635
+    },
+    {
+      "bytes": 16453963,
+      "filename": "shards/taxonomy-00002.json",
+      "first_key": "kingdom:Animalia",
+      "id": "00002",
+      "last_key": "order_name:Coleochaetales",
+      "path": "shards/taxonomy-00002.json",
+      "records": 1534,
+      "sha256": "e6d036c205b59588cbdf01bcbb28c693921853c0e153a0667af78c4d8d7d61c9",
+      "taxonomy_values": 1534
+    },
+    {
+      "bytes": 15069521,
+      "filename": "shards/taxonomy-00003.json",
+      "first_key": "order_name:Coleoptera",
+      "id": "00003",
+      "last_key": "species:Zoodes subpilosus",
+      "path": "shards/taxonomy-00003.json",
+      "records": 1335,
+      "sha256": "c8b010027f45d50d9478efc76cfddb6b5b3fd0a0bfff052a2ba87f688bda2354",
+      "taxonomy_values": 1335
+    }
+  ]
+}

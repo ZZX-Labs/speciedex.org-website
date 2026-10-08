@@ -12,10 +12,10 @@
     "publish"
   ],
   "db_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/db",
-  "duration": "00:01:16",
-  "duration_seconds": 75.903755,
+  "duration": "00:02:40",
+  "duration_seconds": 160.313879,
   "exit_code": 0,
-  "generated_at": "2026-10-08T00:17:30Z",
+  "generated_at": "2026-10-08T04:19:54Z",
   "last_error": "",
   "options": {
     "clean": true,
@@ -51,29 +51,29 @@
         "--source-mode",
         "auto",
         "--rows-per-shard",
-        "100000",
+        "30000",
         "--target-bytes",
-        "75497472",
+        "41943040",
         "--max-bytes",
-        "94371840",
+        "50331648",
         "--minimum-free-bytes",
         "536870912",
         "--clean",
         "--verify"
       ],
-      "duration_seconds": 15.095356,
-      "finished_at": "2026-10-08T00:16:30Z",
-      "message": "Completed in 00:00:15.",
+      "duration_seconds": 24.42341,
+      "finished_at": "2026-10-08T04:17:39Z",
+      "message": "Completed in 00:00:24.",
       "name": "sqlite",
       "resumed": false,
       "return_code": 0,
       "script": "build-sqlite-shards.py",
       "skipped": false,
-      "started_at": "2026-10-08T00:16:15Z",
+      "started_at": "2026-10-08T04:17:14Z",
       "status": "success",
       "stderr_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/sqlite.stderr.log",
       "stderr_tail": [
-        "2026-10-08 00:16:30 INFO Built 4 SQLite shard(s) with 155077 record(s) in 00:00:15."
+        "2026-10-08 04:17:39 INFO Built 7 SQLite shard(s) with 155169 record(s) in 00:00:24."
       ],
       "stdout_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/sqlite.stdout.log",
       "stdout_tail": []
@@ -91,29 +91,29 @@
         "--source-mode",
         "auto",
         "--rows-per-shard",
-        "100000",
+        "30000",
         "--target-bytes",
-        "75497472",
+        "41943040",
         "--max-bytes",
-        "94371840",
+        "50331648",
         "--minimum-free-bytes",
         "536870912",
         "--clean",
         "--verify"
       ],
-      "duration_seconds": 13.920651,
-      "finished_at": "2026-10-08T00:16:44Z",
-      "message": "Completed in 00:00:14.",
+      "duration_seconds": 24.747565,
+      "finished_at": "2026-10-08T04:18:03Z",
+      "message": "Completed in 00:00:25.",
       "name": "mariadb",
       "resumed": false,
       "return_code": 0,
       "script": "build-mariadb-shards.py",
       "skipped": false,
-      "started_at": "2026-10-08T00:16:30Z",
+      "started_at": "2026-10-08T04:17:39Z",
       "status": "success",
       "stderr_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/mariadb.stderr.log",
       "stderr_tail": [
-        "2026-10-08 00:16:44 INFO Built 4 MariaDB shard(s) with 155077 record(s) in 00:00:14."
+        "2026-10-08 04:18:03 INFO Built 7 MariaDB shard(s) with 155169 record(s) in 00:00:25."
       ],
       "stdout_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/mariadb.stdout.log",
       "stdout_tail": []
@@ -129,49 +129,55 @@
         "--output",
         "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes",
         "--shard-size",
-        "25000",
+        "20000",
+        "--shard-target-bytes",
+        "16777216",
+        "--shard-max-bytes",
+        "47185920",
         "--minimum-free-bytes",
         "536870912",
         "--clean",
         "--verify",
+        "--shard",
         "--include-canonical-name",
         "--include-taxonomy"
       ],
-      "duration_seconds": 12.436485,
-      "finished_at": "2026-10-08T00:16:56Z",
-      "message": "Completed in 00:00:12.",
+      "duration_seconds": 49.191831,
+      "finished_at": "2026-10-08T04:18:53Z",
+      "message": "Completed in 00:00:49.",
       "name": "indexes",
       "resumed": false,
       "return_code": 0,
       "script": "build-db-indexes.py",
       "skipped": false,
-      "started_at": "2026-10-08T00:16:44Z",
+      "started_at": "2026-10-08T04:18:03Z",
       "status": "success",
       "stderr_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/indexes.stderr.log",
       "stderr_tail": [
-        "2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/species.json",
-        "2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/names.json",
-        "2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/providers.json",
-        "2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/taxonomy.json",
-        "2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/shards.json",
-        "2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/manifest.json",
-        "2026-10-08 00:16:48 INFO Indexed 100000 source records...",
-        "2026-10-08 00:16:56 INFO Built browser indexes for 155077 records in 12.29 seconds."
+        "2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/species.json",
+        "2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/names.json",
+        "2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/providers.json",
+        "2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/taxonomy.json",
+        "2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/shards.json",
+        "2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/manifest.json",
+        "2026-10-08 04:18:11 INFO Loaded revision enrichment for 2642 taxa from 32140 assertion revisions.",
+        "2026-10-08 04:18:31 INFO Indexed 100000 source records...",
+        "2026-10-08 04:18:52 INFO Built browser indexes for 155169 records in 48.87 seconds."
       ],
       "stdout_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/indexes.stdout.log",
       "stdout_tail": []
     },
     {
       "command": [],
-      "duration_seconds": 6.633937,
-      "finished_at": "2026-10-08T00:17:03Z",
-      "message": "Generated 65 additions/changes and 0 deletions.",
+      "duration_seconds": 13.445972,
+      "finished_at": "2026-10-08T04:19:06Z",
+      "message": "Generated 92 additions/changes and 0 deletions.",
       "name": "updates",
       "resumed": false,
       "return_code": 0,
       "script": "<internal>",
       "skipped": false,
-      "started_at": "2026-10-08T00:16:56Z",
+      "started_at": "2026-10-08T04:18:53Z",
       "status": "success",
       "stderr_log": "",
       "stderr_tail": [],
@@ -187,21 +193,21 @@
         "--report",
         "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/reports/shards.json",
         "--max-bytes",
-        "94371840"
+        "50331648"
       ],
-      "duration_seconds": 12.922122,
-      "finished_at": "2026-10-08T00:17:16Z",
-      "message": "Completed in 00:00:13.",
+      "duration_seconds": 22.723416,
+      "finished_at": "2026-10-08T04:19:29Z",
+      "message": "Completed in 00:00:23.",
       "name": "verify-shards",
       "resumed": false,
       "return_code": 0,
       "script": "verify-shards.py",
       "skipped": false,
-      "started_at": "2026-10-08T00:17:03Z",
+      "started_at": "2026-10-08T04:19:06Z",
       "status": "success",
       "stderr_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/verify-shards.stderr.log",
       "stderr_tail": [
-        "2026-10-08 00:17:16 INFO All 8 database shard(s) passed integrity, checksum, size, schema, row-count, and parity checks in 00:00:13."
+        "2026-10-08 04:19:29 INFO All 14 database shard(s) passed integrity, checksum, size, schema, row-count, and parity checks in 00:00:23."
       ],
       "stdout_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/verify-shards.stdout.log",
       "stdout_tail": []
@@ -216,19 +222,19 @@
         "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/reports/parity.json",
         "--deep"
       ],
-      "duration_seconds": 13.71084,
-      "finished_at": "2026-10-08T00:17:29Z",
-      "message": "Completed in 00:00:14.",
+      "duration_seconds": 24.066468,
+      "finished_at": "2026-10-08T04:19:53Z",
+      "message": "Completed in 00:00:24.",
       "name": "verify-parity",
       "resumed": false,
       "return_code": 0,
       "script": "verify-database-parity.py",
       "skipped": false,
-      "started_at": "2026-10-08T00:17:16Z",
+      "started_at": "2026-10-08T04:19:29Z",
       "status": "success",
       "stderr_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/verify-parity.stderr.log",
       "stderr_tail": [
-        "2026-10-08 00:17:29 INFO SQLite and MariaDB database products are in parity across 4 shard(s) in 00:00:14."
+        "2026-10-08 04:19:53 INFO SQLite and MariaDB database products are in parity across 7 shard(s) in 00:00:24."
       ],
       "stdout_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/verify-parity.stdout.log",
       "stdout_tail": []
@@ -241,34 +247,34 @@
         "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging",
         "--verify"
       ],
-      "duration_seconds": 0.586782,
-      "finished_at": "2026-10-08T00:17:30Z",
+      "duration_seconds": 0.905874,
+      "finished_at": "2026-10-08T04:19:54Z",
       "message": "Completed in 00:00:01.",
       "name": "manifests",
       "resumed": false,
       "return_code": 0,
       "script": "build-db-manifests.py",
       "skipped": false,
-      "started_at": "2026-10-08T00:17:29Z",
+      "started_at": "2026-10-08T04:19:53Z",
       "status": "success",
       "stderr_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/manifests.stderr.log",
       "stderr_tail": [
-        "2026-10-08 00:17:30 INFO Built top-level database manifests for 33 files in 00:00:01."
+        "2026-10-08 04:19:54 INFO Built top-level database manifests for 55 files in 00:00:01."
       ],
       "stdout_log": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db-logs/manifests.stdout.log",
       "stdout_tail": []
     },
     {
       "command": [],
-      "duration_seconds": 0.042461,
-      "finished_at": "2026-10-08T00:17:30Z",
+      "duration_seconds": 0.043001,
+      "finished_at": "2026-10-08T04:19:54Z",
       "message": "Staged products published atomically.",
       "name": "publish",
       "resumed": false,
       "return_code": 0,
       "script": "<internal>",
       "skipped": false,
-      "started_at": "2026-10-08T00:17:30Z",
+      "started_at": "2026-10-08T04:19:54Z",
       "status": "success",
       "stderr_log": "",
       "stderr_tail": [],
@@ -279,20 +285,20 @@
   "taxonomy_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy",
   "updates": {
     "files": {
-      "additions-20261008T001703Z.jsonl.gz": {
-        "bytes": 10150,
-        "records": 65,
-        "sha256": "e0705e8d8d2dc5923ba3fdc9427c6411f83622a5277fd5cdf545e303073a1570"
+      "additions-20261008T041906Z.jsonl.gz": {
+        "bytes": 13823,
+        "records": 92,
+        "sha256": "cf57eb0ce8edd2bed0558c842dda3d2c8259200a03b04644b386ab62659b697b"
       },
-      "deletions-20261008T001703Z.json": {
+      "deletions-20261008T041906Z.json": {
         "bytes": 3,
         "records": 0,
         "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
       },
       "latest-additions.jsonl.gz": {
-        "bytes": 10150,
-        "records": 65,
-        "sha256": "e0705e8d8d2dc5923ba3fdc9427c6411f83622a5277fd5cdf545e303073a1570"
+        "bytes": 13823,
+        "records": 92,
+        "sha256": "cf57eb0ce8edd2bed0558c842dda3d2c8259200a03b04644b386ab62659b697b"
       },
       "latest-deletions.json": {
         "bytes": 3,
@@ -300,20 +306,20 @@
         "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
       }
     },
-    "generated_at": "2026-10-08T00:17:03Z",
+    "generated_at": "2026-10-08T04:19:06Z",
     "kind": "database-updates",
     "latest": {
-      "additions": "additions-20261008T001703Z.jsonl.gz",
-      "deletions": "deletions-20261008T001703Z.json",
+      "additions": "additions-20261008T041906Z.jsonl.gz",
+      "deletions": "deletions-20261008T041906Z.json",
       "latest_additions": "latest-additions.jsonl.gz",
       "latest_deletions": "latest-deletions.json"
     },
     "schema_version": 3,
     "source": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy",
     "totals": {
-      "additions_or_changes": 65,
+      "additions_or_changes": 92,
       "deletions": 0,
-      "records": 155077
+      "records": 155169
     }
   }
 }

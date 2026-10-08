@@ -3,13 +3,13 @@
   "database_exists": true,
   "manifest": {
     "active_volume": "volumes/species-000002.jsonl",
-    "generated_at": "2026-10-08T00:16:06Z",
+    "generated_at": "2026-10-08T04:17:04Z",
     "maximum_volume_bytes": 94371840,
     "record_format": "jsonl",
     "schema_version": 1,
     "target_volume_bytes": 50331648,
-    "total_primary_records": 155077,
-    "total_revisions": 31648,
+    "total_primary_records": 155169,
+    "total_revisions": 32140,
     "volumes": [
       {
         "created_at": "2026-07-19T00:07:05Z",
@@ -23,11 +23,11 @@
       {
         "created_at": "2026-07-27T17:18:16Z",
         "file": "volumes/species-000002.jsonl",
-        "record_count": 71506,
+        "record_count": 71598,
         "sealed": false,
         "sealed_at": null,
         "sha256": null,
-        "size_bytes": 41663752
+        "size_bytes": 41715005
       }
     ]
   },
@@ -37,7 +37,7 @@
       "provider": "gbif"
     },
     {
-      "count": 43185,
+      "count": 43273,
       "provider": "wikispecies"
     },
     {
@@ -45,11 +45,11 @@
       "provider": "inaturalist"
     },
     {
-      "count": 711,
+      "count": 713,
       "provider": "worms"
     },
     {
-      "count": 671,
+      "count": 673,
       "provider": "itis"
     },
     {
@@ -59,7 +59,7 @@
   ],
   "ranks": [
     {
-      "count": 120929,
+      "count": 120999,
       "rank": "species"
     },
     {
@@ -67,7 +67,7 @@
       "rank": "genus"
     },
     {
-      "count": 8291,
+      "count": 8304,
       "rank": "unranked"
     },
     {
@@ -75,7 +75,7 @@
       "rank": "family"
     },
     {
-      "count": 3356,
+      "count": 3365,
       "rank": "subspecies"
     },
     {
@@ -127,7 +127,7 @@
       "rank": "forma"
     }
   ],
-  "records": 155077,
+  "records": 155169,
   "statistics": {
     "class": 321,
     "classes": 321,
@@ -142,7 +142,7 @@
     "genus": 12670,
     "kingdom": 10,
     "kingdoms": 10,
-    "last_updated": "2026-10-08T00:16:09Z",
+    "last_updated": "2026-10-08T04:17:06Z",
     "order": 1225,
     "orders": 1225,
     "phyla": 121,
@@ -158,16 +158,16 @@
       "kingdom": 11,
       "order": 841,
       "phylum": 51,
-      "species": 98092,
-      "subspecies": 3292,
+      "species": 98161,
+      "subspecies": 3300,
       "tribe": 2,
-      "unranked": 8107,
+      "unranked": 8120,
       "variety": 1
     },
-    "records_archived": 155077,
-    "source_assertions": 155091,
-    "species": 98092,
-    "subspecies": 3292,
+    "records_archived": 155169,
+    "source_assertions": 155183,
+    "species": 98161,
+    "subspecies": 3300,
     "synonyms": 190,
     "unresolved_conflicts": 4,
     "volumes": 2

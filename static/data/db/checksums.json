@@ -2,111 +2,191 @@
   "algorithms": [
     "sha256"
   ],
-  "file_count": 33,
+  "file_count": 55,
   "files": {
     "README.md": {
       "bytes": 1857,
       "sha256": "6c237c0a3c66a29e5f9724b4ef1bd5da9fddc1ddf9d1a7c98071cab32ff1be1c"
     },
     "indexes/build-summary.json": {
-      "bytes": 632,
-      "sha256": "b3ef9bfdb7571b70b96962a4ba9fee78f699e192891bb9d6fa4e6c8df195f47b"
+      "bytes": 690,
+      "sha256": "0475c02788a730dd18a61b8f7e1905cd488bc3b5487e5dc0c2f669987295d016"
     },
     "indexes/manifest.json": {
-      "bytes": 1806,
-      "sha256": "8e17242e4b14a249b288296948ac10e7147a212d0bc0456bf70ef062c05fca2a"
+      "bytes": 10818,
+      "sha256": "2bdf2e8b5f4bbd293cc04bfa850baf5fc4715c4126e1d1fabd65682c6f90f1c1"
     },
     "indexes/names.json": {
-      "bytes": 29312551,
-      "sha256": "679ca91e15ed26f573be6caf230493c21a3bcddaf3855068c84cdfce51308a45"
+      "bytes": 26509956,
+      "sha256": "f4e5067bf1dd7d23a3884c58e02f442a37db15531d94590b226a675df2c8464e"
     },
     "indexes/providers.json": {
-      "bytes": 12871510,
-      "sha256": "b0897d723c23c21989c2ba6fe411dd3bb8be4262e3236c6df2b4404888d92be9"
+      "bytes": 12104350,
+      "sha256": "cafbf280276994ddc296fe278e518470a861fd7aff9584fd52649a86d3eae779"
+    },
+    "indexes/shards.json": {
+      "bytes": 5748,
+      "sha256": "e279d7e9e7911db933c3c16ecc57a3c8a66af6f6ffc4b36577278a926d54f577"
+    },
+    "indexes/shards/species-00000.json": {
+      "bytes": 16740827,
+      "sha256": "3834a0e533332af2ec5aa2757edbf003414f085a33fd20b33abc76a87bf571dc"
+    },
+    "indexes/shards/species-00001.json": {
+      "bytes": 16740896,
+      "sha256": "d88e8866d3dfc64d69d390b623eaba7960d097385afcfd37a6e8e091fc67fa02"
+    },
+    "indexes/shards/species-00002.json": {
+      "bytes": 16741052,
+      "sha256": "770ae38fd4cc4e8c5a4379660b5ef442a2b7e1e461e1bf53d1755ce9c5434a46"
+    },
+    "indexes/shards/species-00003.json": {
+      "bytes": 16741277,
+      "sha256": "4e8815dd2d52ab49417a6b67b747b6deb9439f915f0254a7ba9c01603c18fb24"
+    },
+    "indexes/shards/species-00004.json": {
+      "bytes": 16741102,
+      "sha256": "8ef7306f16d5c2728924b2fef88300eb39c1199ab71f5a4572f022f39516ad67"
+    },
+    "indexes/shards/species-00005.json": {
+      "bytes": 16741587,
+      "sha256": "11adbed7226ba5734b507fa1c15cce154e2c1335ce25fce39a946b0f7b602e82"
+    },
+    "indexes/shards/species-00006.json": {
+      "bytes": 16741219,
+      "sha256": "cc2b9621a7830cb73f18f5d1924a4bfd4820e68d6623f11bc145d0e426996756"
+    },
+    "indexes/shards/species-00007.json": {
+      "bytes": 16741517,
+      "sha256": "6eb2160c09eaf843b8b61a0a4c83d79442bee01d57506735661bf475fc4f054c"
+    },
+    "indexes/shards/species-00008.json": {
+      "bytes": 12199056,
+      "sha256": "8a8548bdac807581767a43c531b3c0017f3fec9b94bc0232813b74f23e218db1"
+    },
+    "indexes/shards/taxonomy-00000.json": {
+      "bytes": 16316008,
+      "sha256": "fdf51432e4521df04102f70a49c6f18e4f968f7ad792f7219d6d0c462a47f8c8"
+    },
+    "indexes/shards/taxonomy-00001.json": {
+      "bytes": 14661146,
+      "sha256": "c3adbadacf0a9ca80c4d242972a6422be1cf97f064d0c91f403f1623eb50d21c"
+    },
+    "indexes/shards/taxonomy-00002.json": {
+      "bytes": 16453963,
+      "sha256": "e6d036c205b59588cbdf01bcbb28c693921853c0e153a0667af78c4d8d7d61c9"
+    },
+    "indexes/shards/taxonomy-00003.json": {
+      "bytes": 15069521,
+      "sha256": "c8b010027f45d50d9478efc76cfddb6b5b3fd0a0bfff052a2ba87f688bda2354"
     },
     "indexes/species.json": {
-      "bytes": 90946859,
-      "sha256": "96e0276c49e20d96f0d3f007264b76ccdb6c7c58f067450d5c8d26b463a17ae6"
+      "bytes": 4356,
+      "sha256": "75946b1c1bb145923ac38b845daf67ae62c3149487b54ac11857f0ca38be27bf"
     },
     "indexes/taxonomy.json": {
-      "bytes": 51174291,
-      "sha256": "fc406059aa9d19c267f58195445ad2f8a498e7084bd3d5efe4c9f059fe73205f"
+      "bytes": 1780,
+      "sha256": "bd59c0c4fe8422371f20f7b2b22245c98e89935e59f97d71338f5b3c51b2b3a9"
     },
     "mariadb/build-state.json": {
-      "bytes": 2105,
-      "sha256": "8867e95a562b3ce570592ec4d2f258e75ae46bdb1cf9769369f4973e5203787c"
+      "bytes": 3214,
+      "sha256": "43b2c4d982df3d72752760cb77cf8f37d8be3a45da28c7b6129c11544054800d"
     },
     "mariadb/build-summary.json": {
-      "bytes": 2494,
-      "sha256": "e59d072655467c2e7d6917e0b5efdd27a55a48766059a61d9cd8ccc40bba547e"
+      "bytes": 3602,
+      "sha256": "bd0a2862b3108085a8d1302424fd34522ec3a500dfc1e4624e0b3ea8068ea5e5"
     },
     "mariadb/manifest.json": {
-      "bytes": 4329,
-      "sha256": "f4483422ca149f6509ac1d7fead8b9c9c2d729b18840e0d668d20c061164bf61"
+      "bytes": 6791,
+      "sha256": "f1a3919fb46dcd34b65d8d30a08b7c3aae92e5db27f5db88af893b3a1768b0a0"
     },
     "mariadb/schema.sql": {
       "bytes": 1746,
       "sha256": "9eb013ee824b205cd36d9a6c273c88217a1e0ea15b0472e0066f79d2e8dd6391"
     },
     "mariadb/speciedex-000001.sql.gz": {
-      "bytes": 6432337,
-      "sha256": "296c4f4cfe6b7c4b05fd5e97685c038338b903879dedaca83141bb98335c2b3c"
+      "bytes": 3621679,
+      "sha256": "7024ae0f14c3c46f196409820eec7c4413f3d32473e6950699bc7130cfa09c81"
     },
     "mariadb/speciedex-000002.sql.gz": {
-      "bytes": 6389665,
-      "sha256": "5abc36786178364418bf923ab08187ddd3950956b7f04efdab091e23faccb83b"
+      "bytes": 3522907,
+      "sha256": "39ca78ddd615956c0d6109f16a6a908102096e4cc8b2bb1fbd5f40aefbf1eeed"
     },
     "mariadb/speciedex-000003.sql.gz": {
-      "bytes": 6461544,
-      "sha256": "6de5ba1529a5bec9635950143482d7b0fe550d675674c67bdbfc62e41d78af02"
+      "bytes": 3517426,
+      "sha256": "b64f30130bb02a81fd6a963c7601388491335b9946b4b43cd5f754e1fed00d56"
     },
     "mariadb/speciedex-000004.sql.gz": {
-      "bytes": 3097804,
-      "sha256": "b69d7536001e7fb7748062aec3b69c54db4b5e59e89160a53c14d0469987b35a"
+      "bytes": 3579935,
+      "sha256": "18a1004865fdd407bf6733bca299987ec06687748759a56f675b649f07cc3745"
+    },
+    "mariadb/speciedex-000005.sql.gz": {
+      "bytes": 3603218,
+      "sha256": "0430698bd36ca803463e137a9a5db854f83ee99d2845d0895c32f6d0ab3efb69"
+    },
+    "mariadb/speciedex-000006.sql.gz": {
+      "bytes": 3604513,
+      "sha256": "4e9a3910e68c18a974a40afebf05b71fcbcf9fb1ebda984f680da139d19d7b14"
+    },
+    "mariadb/speciedex-000007.sql.gz": {
+      "bytes": 946967,
+      "sha256": "d76965e72176e8efe7c5a3087b30cd87e56bd0936f916155a129fca71897d59e"
     },
     "providers.json": {
       "bytes": 74,
       "sha256": "2ec51bf621a935acc4b3aeffbc343775a171cc5bd106949f9b9efc4d5e01cee8"
     },
     "reports/parity.json": {
-      "bytes": 6243,
-      "sha256": "4f6de9aff5172af22d99ddf381230d6f606b3690cf3bb5fda4fbd885e0b83b24"
+      "bytes": 10364,
+      "sha256": "01148578ebcaf94b0e9fb355098d4f10af51a7c6fd94b413e5aeb193e31b6cd2"
     },
     "reports/shards.json": {
-      "bytes": 11743,
-      "sha256": "09ac6df1d0c893ff5548437588ada2846f8fd29a5a47fc3d7d57248897329ed3"
+      "bytes": 19657,
+      "sha256": "b3dd112714e28368fed7c32b22822652455a1b8559d2cafc0279b692af68651a"
     },
     "schema.json": {
       "bytes": 183,
       "sha256": "3e194f0e27a0be3074a3e1d37fb2ad157d602dca96eda9a386bc12d30c7f7eed"
     },
     "sqlite/build-state.json": {
-      "bytes": 2331,
-      "sha256": "007b923b0b9389bd953529efff794b98341c0037b9ca9c9e559a2157639584fe"
+      "bytes": 3613,
+      "sha256": "4e23a8d9967044538543a1d7e9b15c9c016fc878ae81843ac9c4b897a5736db0"
     },
     "sqlite/build-summary.json": {
-      "bytes": 2733,
-      "sha256": "f022768ceaaf173398f61361d37e0e68b5efacfad01d1d7f3bf390405e6de9a1"
+      "bytes": 4015,
+      "sha256": "d250d2fcd0bf54f335a99a4fe92e8f7d737d8f18736d7fa95bf802735117f77d"
     },
     "sqlite/manifest.json": {
-      "bytes": 4293,
-      "sha256": "137e23cbb68abca5ef670e2bdf7667d5023b0f69e19ce9467c4b681d13818d0f"
+      "bytes": 6764,
+      "sha256": "6e3f8dabad7ada454a1736eac37f8ea912b307bf6758ac390855e83be727f716"
     },
     "sqlite/speciedex-000001.sqlite3": {
-      "bytes": 72929280,
-      "sha256": "e135112a54996768eda64861491c0055f28f6d895213c05985f9f7afa7962ae7"
+      "bytes": 39690240,
+      "sha256": "a8d811e7c52aeac906f8b4285c9b790455d62c85c4cc67bc0139de68dde3f66e"
     },
     "sqlite/speciedex-000002.sqlite3": {
-      "bytes": 73437184,
-      "sha256": "d25bd75d55fb16caf1bfc706d2d388e7e61de1e37d6de79f2a511ff6efaeef0e"
+      "bytes": 41062400,
+      "sha256": "ee8709dc899d12370d2834d50316d2243c093d1f6707509409cfde7469803b3e"
     },
     "sqlite/speciedex-000003.sqlite3": {
-      "bytes": 72732672,
-      "sha256": "d4a052b5b28012a48530c367758a51f3a3fb91e05d78bcb40b08302f8ba5b416"
+      "bytes": 40357888,
+      "sha256": "75b6dcaad6ee83e6f3f5c3e3d174986ab35235e62ffa0cb976b026053b941d0b"
     },
     "sqlite/speciedex-000004.sqlite3": {
-      "bytes": 32452608,
-      "sha256": "3f9e877bd64b1c2d20eadab2dfcb0f19de8795867a624ce49f7f1972c25f9b89"
+      "bytes": 41525248,
+      "sha256": "5be513df1acbe28325fa3673c326b212b6e029e175d16771e6026f7c048a8992"
+    },
+    "sqlite/speciedex-000005.sqlite3": {
+      "bytes": 40738816,
+      "sha256": "c3192b94156fd275310f596a03f6d47b3ddf1b3bfde30c7c6e61d74919f9df22"
+    },
+    "sqlite/speciedex-000006.sqlite3": {
+      "bytes": 37773312,
+      "sha256": "1cb894bcd7b249a597cae580df9d8cc85412fe123875c1d5d9c1d66b6c540c59"
+    },
+    "sqlite/speciedex-000007.sqlite3": {
+      "bytes": 9965568,
+      "sha256": "8deb4f02b59b67266e00b9f568701e563b325b9a26d862711037015f92680fd4"
     },
     "updates/additions-20261007T221441Z.jsonl.gz": {
       "bytes": 29813592,
@@ -116,6 +196,10 @@
       "bytes": 10150,
       "sha256": "e0705e8d8d2dc5923ba3fdc9427c6411f83622a5277fd5cdf545e303073a1570"
     },
+    "updates/additions-20261008T041906Z.jsonl.gz": {
+      "bytes": 13823,
+      "sha256": "cf57eb0ce8edd2bed0558c842dda3d2c8259200a03b04644b386ab62659b697b"
+    },
     "updates/deletions-20261007T221441Z.json": {
       "bytes": 3,
       "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
@@ -124,9 +208,13 @@
       "bytes": 3,
       "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
     },
+    "updates/deletions-20261008T041906Z.json": {
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
     "updates/latest-additions.jsonl.gz": {
-      "bytes": 10150,
-      "sha256": "e0705e8d8d2dc5923ba3fdc9427c6411f83622a5277fd5cdf545e303073a1570"
+      "bytes": 13823,
+      "sha256": "cf57eb0ce8edd2bed0558c842dda3d2c8259200a03b04644b386ab62659b697b"
     },
     "updates/latest-deletions.json": {
       "bytes": 3,
@@ -134,10 +222,10 @@
     },
     "updates/manifest.json": {
       "bytes": 1208,
-      "sha256": "0f89c7b5420780fc63e94bfdd03a8016b000a04699ed2a997fd6a6f6289bf1ee"
+      "sha256": "178d5d9ed6c45aeebaad32cfc9021c9cff704f5b2734d575bc6332143d4d7cac"
     }
   },
-  "generated_at": "2026-10-08T00:17:30.131504+00:00",
+  "generated_at": "2026-10-08T04:19:53.751777+00:00",
   "schema_version": 2,
-  "total_bytes": 488115983
+  "total_bytes": 550691474
 }

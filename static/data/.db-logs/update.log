@@ -12,3 +12,10 @@
 2026-10-08 00:17:16 INFO Running step: verify-parity
 2026-10-08 00:17:29 INFO Running step: manifests
 2026-10-08 00:17:30 INFO Updated all Speciedex database products successfully in 00:01:16.
+2026-10-08 04:17:14 INFO Running step: sqlite
+2026-10-08 04:17:39 INFO Running step: mariadb
+2026-10-08 04:18:03 INFO Running step: indexes
+2026-10-08 04:19:06 INFO Running step: verify-shards
+2026-10-08 04:19:29 INFO Running step: verify-parity
+2026-10-08 04:19:53 INFO Running step: manifests
+2026-10-08 04:19:54 INFO Updated all Speciedex database products successfully in 00:02:40.

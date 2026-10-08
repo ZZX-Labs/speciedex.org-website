@@ -1,8 +1,9 @@
-2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/species.json
-2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/names.json
-2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/providers.json
-2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/taxonomy.json
-2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/shards.json
-2026-10-08 00:16:44 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/manifest.json
-2026-10-08 00:16:48 INFO Indexed 100000 source records...
-2026-10-08 00:16:56 INFO Built browser indexes for 155077 records in 12.29 seconds.
+2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/species.json
+2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/names.json
+2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/providers.json
+2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/taxonomy.json
+2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/shards.json
+2026-10-08 04:18:03 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/manifest.json
+2026-10-08 04:18:11 INFO Loaded revision enrichment for 2642 taxa from 32140 assertion revisions.
+2026-10-08 04:18:31 INFO Indexed 100000 source records...
+2026-10-08 04:18:52 INFO Built browser indexes for 155169 records in 48.87 seconds.
