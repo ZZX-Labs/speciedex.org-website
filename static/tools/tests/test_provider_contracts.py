@@ -38,11 +38,37 @@ def test_every_provider_module_imports_and_implements_contract() -> None:
 
 
 def test_browser_provider_snapshots_match_registry() -> None:
-    expected = len(registry())
+    definitions = registry()
+    expected = len(definitions)
+    registry_names = {item["name"] for item in definitions}
+
+    # static/data/db/providers.json is the browser provider->Speciedex-ID
+    # membership index, not a second copy of the provider registry.  It is
+    # therefore intentionally a mapping and can contain fewer than all 77
+    # providers when only a subset currently has canonical records.
     db = json.loads((REPO_ROOT / "static/data/db/providers.json").read_text(encoding="utf-8"))
+    assert isinstance(db, dict)
+    if "expected_providers" in db:
+        # Newer DB builds wrap the optional materialized provider membership
+        # list with generation metadata.  The list may legitimately be empty
+        # before provider-backed canonical records are materialized.
+        assert int(db["expected_providers"]) == expected
+        materialized = db.get("providers", [])
+        assert isinstance(materialized, list)
+        assert all(
+            isinstance(item, str) and item in registry_names
+            or isinstance(item, dict) and str(item.get("provider") or item.get("id") or "") in registry_names
+            for item in materialized
+        )
+    else:
+        # Legacy browser index: provider name -> Speciedex-ID list.
+        assert set(db).issubset(registry_names)
+        assert all(isinstance(values, list) for values in db.values())
+
+    # The static API provider catalogue is the browser registry snapshot.
     api = json.loads((REPO_ROOT / "api/speciedex/v1/providers.json").read_text(encoding="utf-8"))
-    assert db["count"] == expected == len(db["providers"])
     assert api["count"] == expected == len(api["providers"])
+    assert {item["id"] for item in api["providers"]} == registry_names
 
 
 def test_terminal_provider_routes_and_jsonl_search() -> None:
@@ -117,7 +143,27 @@ def test_static_api_build_contains_provider_widget_snapshots() -> None:
         path = config.static_api_root / "providers" / f"{category}.json"
         assert path.exists(), category
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert "records" in payload, category
+
+        if category != "assertions":
+            assert "records" in payload, category
+            continue
+
+        # Assertions are deliberately sharded so the public Git repository
+        # never recreates the former ~80 MB monolith.  The stable
+        # assertions.json endpoint is now a volume index; each volume keeps
+        # the ordinary records/assertions arrays for existing consumers.
+        assert payload.get("schema") == "speciedex-provider-assertions-volume-index-v1"
+        assert payload.get("sharded") is True
+        volumes = payload.get("volumes") or []
+        assert len(volumes) == payload.get("volume_count")
+        assert volumes
+        assert sum(int(item.get("count", 0)) for item in volumes) == int(payload.get("count", payload.get("total", 0)))
+        for item in volumes:
+            volume_path = config.static_api_root / str(item["path"])
+            assert volume_path.exists(), volume_path
+            volume = json.loads(volume_path.read_text(encoding="utf-8"))
+            assert "records" in volume and "assertions" in volume
+            assert len(volume["records"]) == int(item["count"])
 
 
 def test_terminal_manifest_has_no_missing_assets_or_dependencies() -> None:
