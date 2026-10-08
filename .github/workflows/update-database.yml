@@ -220,6 +220,38 @@ jobs:
       - name: Generate matching terminal API snapshots
         run: python static/tools/terminal-api.py --generate-static
 
+      - name: Enforce GitHub-safe generated file sizes
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          from pathlib import Path
+
+          limit = 49 * 1024 * 1024
+          roots = [Path("static/data/db"), Path("api/speciedex/v1")]
+          oversized = []
+
+          for root in roots:
+              if not root.exists():
+                  continue
+              for path in root.rglob("*"):
+                  if not path.is_file():
+                      continue
+                  size = path.stat().st_size
+                  if size > limit:
+                      oversized.append((path, size))
+
+          if oversized:
+              for path, size in oversized:
+                  print(
+                      f"ERROR: {path} is {size / 1024 / 1024:.2f} MiB; "
+                      "generated public DB/API files must remain below 49 MiB."
+                  )
+              raise SystemExit(1)
+
+          print("All generated public DB/API files are below 49 MiB.")
+          PY
+
       - name: Validate public browser indexes
         run: |
           set -Eeuo pipefail
