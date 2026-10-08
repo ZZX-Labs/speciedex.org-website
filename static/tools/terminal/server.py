@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from .auth import AdminAuthService
 from .cache import TTLCache
 from .config import APIConfig
 from .database import Database
@@ -35,6 +36,7 @@ class TerminalAPIServer:
         self.stats = StatsService(self.database, config.taxonomy_root)
         self.stream = StreamService(config.taxonomy_root, config.stream_interval_ms)
         self.manifests = ManifestService(config.repo_root)
+        self.auth = AdminAuthService()
         self.cache = TTLCache(limit=512, ttl=30)
         self.rate_limiter = RateLimiter(config.rate_limit_per_minute)
         self.router = Router()
@@ -60,7 +62,30 @@ class TerminalAPIServer:
         self.router.add("GET", "/manifests", self._manifests)
         self.router.add("GET", "/checksums", self._manifests)
         self.router.add("GET", "/benchmark", lambda q, b: APIResponse(200, {"ok": True}))
+        self.router.add("GET", "/auth/status", lambda q, b: APIResponse(200, self.auth.public_status()))
+        self.router.add("POST", "/auth/admin/challenge", self._auth_admin_challenge)
+        self.router.add("POST", "/auth/admin/verify", self._auth_admin_verify)
+        self.router.add("POST", "/auth/logout", self._auth_logout)
         self.router.add("GET", "/", lambda q, b: APIResponse(200, self.routes_payload()))
+
+    @staticmethod
+    def _json_body(body: bytes) -> dict[str, Any]:
+        payload = json.loads(body.decode("utf-8") or "{}")
+        if not isinstance(payload, dict):
+            raise ValueError("JSON body must be an object")
+        return payload
+
+    def _auth_admin_challenge(self, query: dict[str, list[str]], body: bytes) -> APIResponse:
+        status, payload = self.auth.challenge(self._json_body(body))
+        return APIResponse(status, payload)
+
+    def _auth_admin_verify(self, query: dict[str, list[str]], body: bytes) -> APIResponse:
+        status, payload = self.auth.verify(self._json_body(body))
+        return APIResponse(status, payload)
+
+    def _auth_logout(self, query: dict[str, list[str]], body: bytes) -> APIResponse:
+        status, payload = self.auth.logout(self._json_body(body))
+        return APIResponse(status, payload)
 
     def _provider_category_handler(self, category: str):
         def handler(query: dict[str, list[str]], body: bytes) -> APIResponse:
