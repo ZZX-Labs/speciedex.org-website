@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-08T04:17:06Z",
+  "generated_at": "2026-10-08T04:26:02Z",
   "providers": [
     {
       "conflicted": 0,
@@ -14,9 +14,9 @@
     },
     {
       "conflicted": 0,
-      "created": 60,
+      "created": 65,
       "error": null,
-      "fetched": 60,
+      "fetched": 65,
       "matched": 0,
       "provider": "wikispecies",
       "rejected": 0,
@@ -26,13 +26,15 @@
     {
       "conflicted": 0,
       "created": 0,
-      "error": "HTTP 400 from api.gbif.org",
+      "error": null,
       "fetched": 0,
       "matched": 0,
+      "next_retry_at": "2026-10-08T04:32:58.660997+00:00",
       "provider": "gbif",
       "rejected": 0,
       "requests": 0,
-      "revised": 0
+      "revised": 0,
+      "status": "cooldown"
     },
     {
       "conflicted": 0,
