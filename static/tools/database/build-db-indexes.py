@@ -71,11 +71,45 @@ TAXONOMY_RANKS = (
     "genus",
 )
 
+COMMON_NAME_SCALAR_FIELDS = (
+    "common_name", "commonName", "vernacular_name", "vernacularName",
+    "preferred_common_name", "preferredCommonName", "english_name",
+    "englishName", "local_name", "localName", "fao_english_name",
+    "faoEnglishName",
+)
+COMMON_NAME_LIST_FIELDS = (
+    "common_names", "commonNames", "vernacular_names", "vernacularNames",
+    "english_names", "englishNames", "fao_names", "faoNames",
+)
+COMMON_NAME_ITEM_FIELDS = (
+    "name", "value", "label", "common_name", "commonName",
+    "vernacular_name", "vernacularName", "english_name", "englishName",
+    "local_name", "localName",
+)
+EXTENDED_RANKS = (
+    "domain", "realm", "superkingdom", "kingdom", "subkingdom",
+    "infrakingdom", "superphylum", "phylum", "division", "subphylum",
+    "subdivision", "infraphylum", "infradivision", "superclass", "class",
+    "subclass", "infraclass", "parvclass", "cohort", "superorder",
+    "order", "suborder", "infraorder", "parvorder", "superfamily",
+    "family", "subfamily", "tribe", "subtribe", "genus", "subgenus",
+    "section", "subsection", "series", "species", "subspecies",
+    "variety", "subvariety", "form", "subform", "strain", "cultivar",
+)
+RANK_ALIASES = {
+    "classname": "class",
+    "class": "class",
+    "ordername": "order",
+    "order": "order",
+    "speciesname": "species",
+}
+
 
 def _common() -> dict[str, Any]:
     try:
         from common import (
             atomic_write_json,
+            atomic_write_text,
             canonical_record,
             is_supported_input,
             iter_canonical_records,
@@ -93,6 +127,7 @@ def _common() -> dict[str, Any]:
 
     return {
         "atomic_write_json": atomic_write_json,
+        "atomic_write_text": atomic_write_text,
         "canonical_record": canonical_record,
         "is_supported_input": is_supported_input,
         "iter_canonical_records": iter_canonical_records,
@@ -118,6 +153,152 @@ def normalized_key(value: Any) -> str:
 
 def unique_sorted(values: Iterable[str]) -> list[str]:
     return sorted(set(values))
+
+
+def ordered_unique(values: Iterable[Any]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = clean_text(value)
+        key = normalized_key(text)
+        if not text or not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+    return result
+
+
+def _list_text_values(value: Any) -> list[str]:
+    values: list[str] = []
+
+    def visit(item: Any) -> None:
+        if item is None:
+            return
+        if isinstance(item, (str, int, float)):
+            text = clean_text(item)
+            if text:
+                values.append(text)
+            return
+        if isinstance(item, Mapping):
+            for field in COMMON_NAME_ITEM_FIELDS:
+                if field in item and clean_text(item.get(field)):
+                    values.append(clean_text(item.get(field)))
+                    return
+            return
+        if isinstance(item, Sequence) and not isinstance(item, (str, bytes)):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return ordered_unique(values)
+
+
+def extract_common_names(record: Mapping[str, Any]) -> list[str]:
+    containers: list[Mapping[str, Any]] = [record]
+    for field in ("extra", "raw", "taxonomy"):
+        value = record.get(field)
+        if isinstance(value, Mapping):
+            containers.append(value)
+    extra = record.get("extra")
+    if isinstance(extra, Mapping):
+        for field in ("raw", "taxonomy"):
+            value = extra.get(field)
+            if isinstance(value, Mapping):
+                containers.append(value)
+
+    values: list[str] = []
+    for container in containers:
+        for field in COMMON_NAME_SCALAR_FIELDS:
+            value = container.get(field)
+            if clean_text(value):
+                values.append(clean_text(value))
+        for field in COMMON_NAME_LIST_FIELDS:
+            values.extend(_list_text_values(container.get(field)))
+
+    scientific = normalized_key(
+        record.get("scientific_name")
+        or record.get("scientificName")
+        or record.get("canonical_name")
+        or record.get("canonicalName")
+    )
+    return [
+        value for value in ordered_unique(values)
+        if normalized_key(value) != scientific
+    ]
+
+
+def _rank_key(value: Any) -> str:
+    text = "".join(ch for ch in clean_text(value).casefold() if ch.isalnum())
+    return RANK_ALIASES.get(text, text)
+
+
+def extract_taxonomy(record: Mapping[str, Any]) -> dict[str, str]:
+    rank_set = set(EXTENDED_RANKS)
+    values: dict[str, str] = {}
+    containers: list[Mapping[str, Any]] = [record]
+
+    for field in ("taxonomy", "classification", "raw"):
+        value = record.get(field)
+        if isinstance(value, Mapping):
+            containers.append(value)
+
+    extra = record.get("extra")
+    if isinstance(extra, Mapping):
+        containers.append(extra)
+        for field in ("taxonomy", "classification", "raw"):
+            value = extra.get(field)
+            if isinstance(value, Mapping):
+                containers.append(value)
+
+    for container in containers:
+        for key, value in container.items():
+            rank = _rank_key(key)
+            text = clean_text(value)
+            if rank in rank_set and text and rank not in values:
+                values[rank] = text
+
+    lineage_candidates = [
+        record.get("lineage"),
+        record.get("taxonomy", {}).get("lineage")
+            if isinstance(record.get("taxonomy"), Mapping) else None,
+        record.get("classification", {}).get("lineage")
+            if isinstance(record.get("classification"), Mapping) else None,
+    ]
+    if isinstance(extra, Mapping):
+        lineage_candidates.extend([
+            extra.get("lineage"),
+            extra.get("taxonomy", {}).get("lineage")
+                if isinstance(extra.get("taxonomy"), Mapping) else None,
+        ])
+
+    for lineage in lineage_candidates:
+        if isinstance(lineage, Mapping):
+            for key, value in lineage.items():
+                rank = _rank_key(key)
+                text = clean_text(value)
+                if rank in rank_set and text and rank not in values:
+                    values[rank] = text
+        elif isinstance(lineage, Sequence) and not isinstance(lineage, (str, bytes)):
+            for entry in lineage:
+                if not isinstance(entry, Mapping):
+                    continue
+                rank = _rank_key(
+                    entry.get("rank") or entry.get("taxon_rank")
+                    or entry.get("taxonRank") or entry.get("level")
+                )
+                text = clean_text(
+                    entry.get("name") or entry.get("scientific_name")
+                    or entry.get("scientificName") or entry.get("value")
+                )
+                if rank in rank_set and text and rank not in values:
+                    values[rank] = text
+
+    return values
+
+
+def atomic_write_json_compact(path: Path, payload: Any) -> None:
+    text = _common()["stable_json"](payload) + "\n"
+    _common()["atomic_write_text"](path, text)
 
 
 def sha256_file(path: Path) -> str:
@@ -295,6 +476,10 @@ class BrowserIndexBuilder:
             or self.taxonomy_root / MANIFEST_FILENAME
         ).resolve()
         self.output = args.output.resolve()
+        self.revisions_root = (
+            args.revisions_root
+            or self.taxonomy_root / "revisions"
+        ).resolve()
         self.shard_root = self.output / "shards"
         self.summary_path = (
             args.summary_file
@@ -323,6 +508,10 @@ class BrowserIndexBuilder:
         self.duplicate_ids = 0
         self.index_files: list[IndexFile] = []
         self.issues: list[str] = []
+        self.revision_enrichment: dict[str, dict[str, Any]] = {}
+        self.revision_records = 0
+        self.enriched_records = 0
+        self.common_name_records = 0
 
     def configure_logging(self) -> None:
         level = logging.DEBUG if self.args.verbose else logging.INFO
@@ -521,6 +710,119 @@ class BrowserIndexBuilder:
                 f"{self.args.minimum_free_bytes} required."
             )
 
+    def load_revision_enrichment(self) -> None:
+        """Aggregate provider-derived names and metadata by Speciedex ID."""
+
+        self.revision_enrichment = {}
+        self.revision_records = 0
+
+        if not self.args.revision_enrichment:
+            return
+        if not self.revisions_root.is_dir():
+            self.logger.info(
+                "Revision enrichment skipped; directory not found: %s",
+                self.revisions_root,
+            )
+            return
+
+        common = _common()
+        revision_files = sorted(
+            path for path in self.revisions_root.glob("revisions-*.jsonl")
+            if path.is_file()
+        )
+
+        for path in revision_files:
+            for revision in common["iter_records"](path):
+                if not isinstance(revision, Mapping):
+                    continue
+                identifier = clean_text(revision.get("speciedex_id"))
+                assertion = revision.get("assertion")
+                if not identifier or not isinstance(assertion, Mapping):
+                    continue
+
+                self.revision_records += 1
+                item = self.revision_enrichment.setdefault(
+                    identifier,
+                    {
+                        "common_names": {},
+                        "providers": {},
+                        "provider_ids": {},
+                        "source_urls": {},
+                        "synonyms": {},
+                        "taxonomy": {},
+                        "assertions": {},
+                        "last_seen": "",
+                        "source_modified": "",
+                    },
+                )
+
+                for name in extract_common_names(assertion):
+                    item["common_names"].setdefault(normalized_key(name), name)
+
+                provider = clean_text(
+                    assertion.get("provider") or revision.get("provider")
+                )
+                provider_id = clean_text(
+                    assertion.get("provider_id") or revision.get("provider_id")
+                )
+                if provider:
+                    item["providers"].setdefault(normalized_key(provider), provider)
+                if provider_id:
+                    label = f"{provider}:{provider_id}" if provider else provider_id
+                    item["provider_ids"].setdefault(normalized_key(label), label)
+                if provider or provider_id:
+                    item["assertions"][f"{provider}\0{provider_id}"] = True
+
+                source_url = clean_text(assertion.get("source_url"))
+                if not source_url:
+                    extra = assertion.get("extra")
+                    if isinstance(extra, Mapping):
+                        source_url = clean_text(
+                            extra.get("canonical_url")
+                            or extra.get("canonicalUrl")
+                            or extra.get("full_url")
+                            or extra.get("url")
+                        )
+                if source_url:
+                    item["source_urls"].setdefault(source_url, source_url)
+
+                synonyms = assertion.get("synonyms")
+                if isinstance(synonyms, Sequence) and not isinstance(synonyms, (str, bytes)):
+                    for synonym in synonyms:
+                        if isinstance(synonym, Mapping):
+                            synonym = (
+                                synonym.get("scientific_name")
+                                or synonym.get("scientificName")
+                                or synonym.get("name")
+                            )
+                        text = clean_text(synonym)
+                        if text:
+                            item["synonyms"].setdefault(normalized_key(text), text)
+
+                for rank, value in extract_taxonomy(assertion).items():
+                    item["taxonomy"].setdefault(rank, value)
+
+                last_seen = clean_text(
+                    revision.get("changed_at")
+                    or assertion.get("retrieved_at")
+                    or assertion.get("updated_at")
+                )
+                if last_seen > item["last_seen"]:
+                    item["last_seen"] = last_seen
+
+                source_modified = clean_text(
+                    assertion.get("source_modified")
+                    or assertion.get("modified")
+                )
+                if source_modified > item["source_modified"]:
+                    item["source_modified"] = source_modified
+
+        self.logger.info(
+            "Loaded revision enrichment for %d taxa from %d assertion revisions.",
+            len(self.revision_enrichment),
+            self.revision_records,
+        )
+
     def iter_source_records(self) -> Iterator[dict[str, Any]]:
         common = _common()
 
@@ -542,6 +844,32 @@ class BrowserIndexBuilder:
                     source_file=relative,
                     provider_hint=provider_hint,
                 )
+                initial_source = raw.get("initial_source")
+                if not isinstance(initial_source, Mapping):
+                    initial_source = {}
+
+                record["_library_meta"] = {
+                    "identity_key": clean_text(raw.get("identity_key")),
+                    "date_added": clean_text(
+                        raw.get("first_seen")
+                        or raw.get("created_at")
+                        or raw.get("createdAt")
+                    ),
+                    "provider_id": clean_text(
+                        initial_source.get("provider_id")
+                        or initial_source.get("providerId")
+                        or raw.get("provider_id")
+                        or raw.get("providerId")
+                    ),
+                    "source_url": clean_text(
+                        initial_source.get("url")
+                        or raw.get("source_url")
+                        or raw.get("sourceUrl")
+                    ),
+                    "common_names": extract_common_names(raw),
+                    "taxonomy": extract_taxonomy(raw),
+                }
+
                 errors = common["validate_canonical_record"](record)
 
                 if errors:
@@ -574,15 +902,93 @@ class BrowserIndexBuilder:
                 f"Canonical record {identifier} is missing scientific_name."
             )
 
+        meta = record.get("_library_meta")
+        if not isinstance(meta, Mapping):
+            meta = {}
+        enrichment = self.revision_enrichment.get(identifier, {})
+
+        common_names = ordered_unique([
+            record.get("common_name"),
+            *meta.get("common_names", []),
+            *(
+                enrichment.get("common_names", {}).values()
+                if isinstance(enrichment.get("common_names"), Mapping)
+                else []
+            ),
+        ])
+        providers = ordered_unique([
+            record.get("provider"),
+            *(
+                enrichment.get("providers", {}).values()
+                if isinstance(enrichment.get("providers"), Mapping)
+                else []
+            ),
+        ])
+        provider_ids = ordered_unique([
+            meta.get("provider_id"),
+            *(
+                enrichment.get("provider_ids", {}).values()
+                if isinstance(enrichment.get("provider_ids"), Mapping)
+                else []
+            ),
+        ])
+        source_urls = ordered_unique([
+            meta.get("source_url"),
+            *(
+                enrichment.get("source_urls", {}).values()
+                if isinstance(enrichment.get("source_urls"), Mapping)
+                else []
+            ),
+        ])
+        synonyms = ordered_unique(
+            enrichment.get("synonyms", {}).values()
+            if isinstance(enrichment.get("synonyms"), Mapping)
+            else []
+        )
+        date_added = clean_text(meta.get("date_added")) or clean_text(
+            record.get("indexed_at")
+        )
+        last_seen = clean_text(enrichment.get("last_seen")) or date_added
+        source_modified = clean_text(enrichment.get("source_modified"))
+        assertion_count = len(enrichment.get("assertions", {})) \
+            if isinstance(enrichment.get("assertions"), Mapping) else 0
+
         compact: dict[str, Any] = {
             "id": identifier,
             "scientific_name": scientific_name,
-            "common_name": clean_text(record.get("common_name")),
+            "common_name": common_names[0] if common_names else "",
             "rank": clean_text(record.get("rank")),
             "status": clean_text(record.get("status")),
-            "provider": clean_text(record.get("provider")),
+            "provider": providers[0] if providers else clean_text(record.get("provider")),
             "indexed_at": clean_text(record.get("indexed_at")),
+            "date_added": date_added,
+            "last_seen": last_seen,
+            "source_count": assertion_count or (1 if providers else 0),
         }
+
+        optional_scalars = {
+            "authorship": clean_text(record.get("authorship")),
+            "provider_id": clean_text(meta.get("provider_id")),
+            "source_url": source_urls[0] if source_urls else "",
+            "source_modified": source_modified,
+            "identity_key": clean_text(meta.get("identity_key")),
+            "license": clean_text(record.get("license")),
+            "country": clean_text(record.get("country")),
+            "region": clean_text(record.get("region")),
+        }
+        for key, value in optional_scalars.items():
+            if value:
+                compact[key] = value
+
+        for key, values in (
+            ("common_names", common_names),
+            ("providers", providers),
+            ("provider_ids", provider_ids),
+            ("source_urls", source_urls),
+            ("synonyms", synonyms),
+        ):
+            if values:
+                compact[key] = values
 
         if self.args.include_canonical_name:
             compact["canonical_name"] = clean_text(
@@ -593,9 +999,30 @@ class BrowserIndexBuilder:
             for rank in TAXONOMY_RANKS:
                 compact[rank] = clean_text(record.get(rank))
 
+            taxonomy: dict[str, str] = {}
+            if isinstance(meta.get("taxonomy"), Mapping):
+                taxonomy.update({
+                    clean_text(rank): clean_text(value)
+                    for rank, value in meta["taxonomy"].items()
+                    if clean_text(rank) and clean_text(value)
+                })
+            if isinstance(enrichment.get("taxonomy"), Mapping):
+                for rank, value in enrichment["taxonomy"].items():
+                    if clean_text(rank) and clean_text(value):
+                        taxonomy.setdefault(clean_text(rank), clean_text(value))
+            if taxonomy:
+                compact["taxonomy"] = taxonomy
+
+        if enrichment:
+            self.enriched_records += 1
+        if common_names:
+            self.common_name_records += 1
+
         return compact
 
     def ingest(self) -> None:
+        self.load_revision_enrichment()
+
         for record in self.iter_source_records():
             self.source_records += 1
 
@@ -630,22 +1057,37 @@ class BrowserIndexBuilder:
 
             self.species[identifier] = compact
 
-            for value in (
+            name_values = [
                 record.get("scientific_name", ""),
                 record.get("canonical_name", ""),
-                record.get("common_name", ""),
-            ):
+                compact.get("common_name", ""),
+                *compact.get("common_names", []),
+                *compact.get("synonyms", []),
+            ]
+            for value in name_values:
                 key = normalized_key(value)
                 if key:
                     self.names[key].append(identifier)
 
-            provider = clean_text(record.get("provider")) or "unknown"
-            self.providers[provider].append(identifier)
+            provider_values = compact.get("providers") or [
+                clean_text(record.get("provider")) or "unknown"
+            ]
+            for provider in provider_values:
+                normalized_provider = clean_text(provider) or "unknown"
+                self.providers[normalized_provider].append(identifier)
 
             for rank in TAXONOMY_RANKS:
-                value = clean_text(record.get(rank))
+                value = clean_text(compact.get(rank) or record.get(rank))
                 if value:
                     self.taxonomy[rank][value].append(identifier)
+
+            extended_taxonomy = compact.get("taxonomy")
+            if isinstance(extended_taxonomy, Mapping):
+                for rank, value in extended_taxonomy.items():
+                    normalized_rank = _rank_key(rank)
+                    normalized_value = clean_text(value)
+                    if normalized_rank and normalized_value:
+                        self.taxonomy[normalized_rank][normalized_value].append(identifier)
 
             if (
                 self.args.progress_every
@@ -702,6 +1144,7 @@ class BrowserIndexBuilder:
         payload: Any,
         *,
         records: int,
+        compact: bool = False,
     ) -> Path:
         path = self.output / filename
 
@@ -709,7 +1152,10 @@ class BrowserIndexBuilder:
             self.logger.info("Would write %s", path)
             return path
 
-        atomic_write_json(path, payload)
+        if compact:
+            atomic_write_json_compact(path, payload)
+        else:
+            atomic_write_json(path, payload)
 
         self.index_files.append(
             IndexFile(
@@ -758,7 +1204,7 @@ class BrowserIndexBuilder:
             path = self.shard_root / filename
 
             if not self.args.dry_run:
-                atomic_write_json(path, payload)
+                atomic_write_json_compact(path, payload)
 
             descriptor = {
                 "id": f"{shard_number:05d}",
@@ -785,6 +1231,7 @@ class BrowserIndexBuilder:
             "species.json",
             species,
             records=len(species),
+            compact=True,
         )
         self.write_index(
             "names.json",
@@ -850,6 +1297,12 @@ class BrowserIndexBuilder:
                     for values in taxonomy.values()
                 ),
                 "shards": len(shard_index),
+                "revision_assertions_scanned": self.revision_records,
+                "revision_enriched_records": self.enriched_records,
+                "records_with_common_names": self.common_name_records,
+                "records_without_common_names": max(
+                    0, len(species) - self.common_name_records
+                ),
             },
             "taxonomy_values": {
                 rank: len(values)
@@ -862,6 +1315,9 @@ class BrowserIndexBuilder:
                     self.args.include_canonical_name
                 ),
                 "include_taxonomy": self.args.include_taxonomy,
+                "revision_enrichment": self.args.revision_enrichment,
+                "revisions_root": self.revisions_root.as_posix(),
+                "compact_species_json": True,
                 "sharded": bool(self.args.shard),
                 "shard_size": (
                     self.args.shard_size
@@ -1176,6 +1632,25 @@ def parse_args(
         type=Path,
         default=Path("static/data/taxonomy"),
         help="Root directory containing canonical taxonomy records.",
+    )
+    parser.add_argument(
+        "--revisions-root",
+        type=Path,
+        default=None,
+        help=(
+            "Provider assertion revision directory used to enrich common names, "
+            "sources, synonyms, dates, and extended taxonomy; defaults to "
+            "taxonomy/revisions."
+        ),
+    )
+    parser.add_argument(
+        "--revision-enrichment",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Merge provider assertion revisions into browser species records so "
+            "library readers retain common names and source metadata."
+        ),
     )
     parser.add_argument(
         "--archive-manifest",
