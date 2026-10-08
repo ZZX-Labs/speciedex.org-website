@@ -8,7 +8,7 @@
     },
     {
       "path": "api/speciedex/v1/index.json",
-      "sha256": "43669fd0b131140e6b5a867bb1f0adae7d601a7de4fc85400753aefb2bfe5a8c",
+      "sha256": "f30a3713e95e7a694e422bb35b66ce091888e0a57697636fed7fabea8e97f8b8",
       "size": 864
     },
     {
@@ -92,6 +92,6 @@
       "size": 92297
     }
   ],
-  "generated_at": "2026-10-08T00:17:32.996114+00:00",
+  "generated_at": "2026-10-08T03:47:12.839980+00:00",
   "schema": "speciedex-terminal-api-manifest"
 }
