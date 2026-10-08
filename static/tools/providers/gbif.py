@@ -130,9 +130,11 @@ class Provider(BaseProvider):
         )
 
         active_filters = self._configured_filters()
-        if not active_filters:
-            endpoint = f"{base_url}/species"
 
+        # GBIF's paginated taxonomic catalogue is exposed by /species/search.
+        # The bare /species route is not a list endpoint and returns HTTP 400
+        # for the offset/limit request used by Speciedex when no filters are set.
+        # Keep the search endpoint for both filtered and unfiltered scans.
         parameters: dict[str, Any] = {
             "offset": offset,
             "limit": limit,
